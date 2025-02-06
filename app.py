@@ -456,7 +456,8 @@ elif ops_agents_enabled and selected_ops == "🔍 Failure Analysis":
                         st.metric(
                             "Passed Tests", 
                             test_data.get("passed", 0),
-                            f"{pass_percentage:.1f}%"
+                            f"{pass_percentage:.1f}%",
+                            delta_color="normal"  # Green for increase, red for decrease
                         )
                     
                     with col3:
@@ -464,7 +465,8 @@ elif ops_agents_enabled and selected_ops == "🔍 Failure Analysis":
                         st.metric(
                             "Failed Tests", 
                             test_data.get("failed", 0),
-                            f"{fail_percentage:.1f}%"
+                            f"{fail_percentage:.1f}%",
+                            delta_color="inverse"  # Red for increase, green for decrease
                         )
 
                     # Display test cases table
@@ -712,356 +714,374 @@ elif ops_agents_enabled and selected_ops == "🔍 Failure Analysis":
 
                     # Update the Heatmap with modern design
                     st.markdown("<br>", unsafe_allow_html=True)
-                    if failure_trend:
-                        fig_heatmap = go.Figure()
-                        
-                        fig_heatmap.add_trace(go.Heatmap(
-                            x=df_trend["Date"],
-                            y=["Failure Rate"],
-                            z=[df_trend["Failure Rate"]],
-                            colorscale=[
-                                [0, '#E8F5E9'],      # Very light green
-                                [0.2, '#81C784'],    # Light green
-                                [0.4, '#4CAF50'],    # Medium green
-                                [0.6, '#FFF3E0'],    # Light orange
-                                [0.8, '#FFB74D'],    # Medium orange
-                                [1, '#FF6B6B']       # Soft red
-                            ],
-                            hoverongaps=False,
-                            hovertemplate=(
-                                "<b>Date</b>: %{x|%Y-%m-%d}<br>" +
-                                "<b>Failure Rate</b>: %{z:.1f}%<br>" +
-                                "<extra></extra>"
-                            ),
-                            showscale=True
-                        ))
-                        
-                        fig_heatmap.update_layout(
-                            title=dict(
-                                text="Failure Rate Trend",
-                                x=0.5,
-                                font=dict(size=16, color='#333333')
-                            ),
-                            height=180,
-                            plot_bgcolor='rgba(0,0,0,0)',
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            margin=dict(l=20, r=20, t=40, b=20),
-                            xaxis=dict(
-                                showgrid=False,
-                                zeroline=False,
-                                showline=True,
-                                linecolor='rgb(204, 204, 204)',
-                                linewidth=2
-                            ),
-                            yaxis=dict(
-                                showgrid=False,
-                                zeroline=False,
-                                showticklabels=False,
-                                showline=True,
-                                linecolor='rgb(204, 204, 204)',
-                                linewidth=2
-                            )
-                        )
+                    if test_data and "failure_trend" in test_data:
+                        failure_trend = test_data["failure_trend"]
+                        if failure_trend:
+                            trend_data = []
+                            for date, data in failure_trend.items():
+                                trend_data.append({
+                                    "Date": date,
+                                    "Total Tests": data.get("total", 0),
+                                    "Failed Tests": data.get("failed", 0),
+                                    "Failure Rate": data.get("failure_rate", 0)
+                                })
+                            
+                            if trend_data:
+                                df_trend = pd.DataFrame(trend_data)
+                                df_trend["Date"] = pd.to_datetime(df_trend["Date"])
+                                df_trend = df_trend.sort_values("Date")
+                                
+                                # Create modern heatmap
+                                fig_heatmap = go.Figure()
+                                
+                                fig_heatmap.add_trace(go.Heatmap(
+                                    x=df_trend["Date"],
+                                    y=["Failure Rate"],
+                                    z=[df_trend["Failure Rate"]],
+                                    colorscale=[
+                                        [0, '#E8F5E9'],      # Very light green
+                                        [0.2, '#81C784'],    # Light green
+                                        [0.4, '#4CAF50'],    # Medium green
+                                        [0.6, '#FFF3E0'],    # Light orange
+                                        [0.8, '#FFB74D'],    # Medium orange
+                                        [1, '#FF6B6B']       # Soft red
+                                    ],
+                                    hoverongaps=False,
+                                    hovertemplate=(
+                                        "<b>Date</b>: %{x|%Y-%m-%d}<br>" +
+                                        "<b>Failure Rate</b>: %{z:.1f}%<br>" +
+                                        "<extra></extra>"
+                                    ),
+                                    showscale=True
+                                ))
+                                
+                                fig_heatmap.update_layout(
+                                    title=dict(
+                                        text="Failure Rate Trend",
+                                        x=0.5,
+                                        font=dict(size=16, color='#333333')
+                                    ),
+                                    height=180,
+                                    plot_bgcolor='rgba(0,0,0,0)',
+                                    paper_bgcolor='rgba(0,0,0,0)',
+                                    margin=dict(l=20, r=20, t=40, b=20),
+                                    xaxis=dict(
+                                        showgrid=False,
+                                        zeroline=False,
+                                        showline=True,
+                                        linecolor='rgb(204, 204, 204)',
+                                        linewidth=2
+                                    ),
+                                    yaxis=dict(
+                                        showgrid=False,
+                                        zeroline=False,
+                                        showticklabels=False,
+                                        showline=True,
+                                        linecolor='rgb(204, 204, 204)',
+                                        linewidth=2
+                                    )
+                                )
 
-                        # Add trend line chart with modern design
-                        fig_line = go.Figure()
-                        
-                        # Add area fill for total tests
-                        fig_line.add_trace(go.Scatter(
-                            x=df_trend["Date"],
-                            y=df_trend["Total Tests"],
-                            name="Total Tests",
-                            fill='tozeroy',
-                            fillcolor='rgba(76, 175, 80, 0.1)',
-                            line=dict(color='#4CAF50', width=3),
-                            mode='lines+markers',
-                            marker=dict(
-                                size=8,
-                                symbol='circle',
-                                line=dict(color='#FFFFFF', width=2)
-                            )
-                        ))
-                        
-                        # Add area fill for failed tests
-                        fig_line.add_trace(go.Scatter(
-                            x=df_trend["Date"],
-                            y=df_trend["Failed Tests"],
-                            name="Failed Tests",
-                            fill='tozeroy',
-                            fillcolor='rgba(255, 107, 107, 0.1)',
-                            line=dict(color='#FF6B6B', width=3),
-                            mode='lines+markers',
-                            marker=dict(
-                                size=8,
-                                symbol='circle',
-                                line=dict(color='#FFFFFF', width=2)
-                            )
-                        ))
-                        
-                        fig_line.update_layout(
-                            title={
-                                'text': "Test Execution Trend",
-                                'y':0.95,
-                                'x':0.5,
-                                'xanchor': 'center',
-                                'yanchor': 'top',
-                                'font': dict(size=16)
-                            },
-                            plot_bgcolor='rgba(0,0,0,0)',
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            hovermode='x unified',
-                            showlegend=True,
-                            legend=dict(
-                                orientation="h",
-                                yanchor="bottom",
-                                y=1.02,
-                                xanchor="right",
-                                x=1,
-                                bgcolor='rgba(255, 255, 255, 0.8)',
-                                bordercolor='rgba(0, 0, 0, 0.1)',
-                                borderwidth=1
-                            ),
-                            margin=dict(l=20, r=20, t=60, b=20),
-                            xaxis=dict(
-                                showgrid=True,
-                                gridcolor='rgba(204, 204, 204, 0.3)',
-                                showline=True,
-                                linecolor='rgb(204, 204, 204)',
-                                linewidth=2,
-                                ticks='outside',
-                                tickfont=dict(size=10)
-                            ),
-                            yaxis=dict(
-                                showgrid=True,
-                                gridcolor='rgba(204, 204, 204, 0.3)',
-                                showline=True,
-                                linecolor='rgb(204, 204, 204)',
-                                linewidth=2,
-                                ticks='outside',
-                                tickfont=dict(size=10)
-                            )
-                        )
+                                # Add trend line chart with modern design
+                                fig_line = go.Figure()
+                                
+                                # Add area fill for total tests
+                                fig_line.add_trace(go.Scatter(
+                                    x=df_trend["Date"],
+                                    y=df_trend["Total Tests"],
+                                    name="Total Tests",
+                                    fill='tozeroy',
+                                    fillcolor='rgba(76, 175, 80, 0.1)',
+                                    line=dict(color='#4CAF50', width=3),
+                                    mode='lines+markers',
+                                    marker=dict(
+                                        size=8,
+                                        symbol='circle',
+                                        line=dict(color='#FFFFFF', width=2)
+                                    )
+                                ))
+                                
+                                # Add area fill for failed tests
+                                fig_line.add_trace(go.Scatter(
+                                    x=df_trend["Date"],
+                                    y=df_trend["Failed Tests"],
+                                    name="Failed Tests",
+                                    fill='tozeroy',
+                                    fillcolor='rgba(255, 107, 107, 0.1)',
+                                    line=dict(color='#FF6B6B', width=3),
+                                    mode='lines+markers',
+                                    marker=dict(
+                                        size=8,
+                                        symbol='circle',
+                                        line=dict(color='#FFFFFF', width=2)
+                                    )
+                                ))
+                                
+                                fig_line.update_layout(
+                                    title={
+                                        'text': "Test Execution Trend",
+                                        'y':0.95,
+                                        'x':0.5,
+                                        'xanchor': 'center',
+                                        'yanchor': 'top',
+                                        'font': dict(size=16)
+                                    },
+                                    plot_bgcolor='rgba(0,0,0,0)',
+                                    paper_bgcolor='rgba(0,0,0,0)',
+                                    hovermode='x unified',
+                                    showlegend=True,
+                                    legend=dict(
+                                        orientation="h",
+                                        yanchor="bottom",
+                                        y=1.02,
+                                        xanchor="right",
+                                        x=1,
+                                        bgcolor='rgba(255, 255, 255, 0.8)',
+                                        bordercolor='rgba(0, 0, 0, 0.1)',
+                                        borderwidth=1
+                                    ),
+                                    margin=dict(l=20, r=20, t=60, b=20),
+                                    xaxis=dict(
+                                        showgrid=True,
+                                        gridcolor='rgba(204, 204, 204, 0.3)',
+                                        showline=True,
+                                        linecolor='rgb(204, 204, 204)',
+                                        linewidth=2,
+                                        ticks='outside',
+                                        tickfont=dict(size=10)
+                                    ),
+                                    yaxis=dict(
+                                        showgrid=True,
+                                        gridcolor='rgba(204, 204, 204, 0.3)',
+                                        showline=True,
+                                        linecolor='rgb(204, 204, 204)',
+                                        linewidth=2,
+                                        ticks='outside',
+                                        tickfont=dict(size=10)
+                                    )
+                                )
 
-                        st.plotly_chart(fig_line, use_container_width=True)
+                                st.plotly_chart(fig_line, use_container_width=True)
 
                     # Add modernized Failure Trend Heatmap
                     st.subheader("🔥 Test Case Failure Trend (Last 10 Days)")
 
-                    failure_trend = test_data.get("failure_trend", {})
-                    if failure_trend:
-                        trend_data = []
-                        for date, data in failure_trend.items():
-                            trend_data.append({
-                                "Date": date,
-                                "Total Tests": data.get("total", 0),
-                                "Failed Tests": data.get("failed", 0),
-                                "Failure Rate": data.get("failure_rate", 0)
-                            })
-                        
-                        if trend_data:
-                            df_trend = pd.DataFrame(trend_data)
-                            df_trend["Date"] = pd.to_datetime(df_trend["Date"])
-                            df_trend = df_trend.sort_values("Date")
+                    if test_data and "failure_trend" in test_data:
+                        failure_trend = test_data["failure_trend"]
+                        if failure_trend:
+                            trend_data = []
+                            for date, data in failure_trend.items():
+                                trend_data.append({
+                                    "Date": date,
+                                    "Total Tests": data.get("total", 0),
+                                    "Failed Tests": data.get("failed", 0),
+                                    "Failure Rate": data.get("failure_rate", 0)
+                                })
                             
-                            # Create modern heatmap
-                            fig_heatmap = go.Figure()
-                            
-                            fig_heatmap.add_trace(go.Heatmap(
-                                x=df_trend["Date"],
-                                y=["Failure Rate"],
-                                z=[df_trend["Failure Rate"]],
-                                colorscale=[
-                                    [0, '#4CAF50'],      # Softer green for low values
-                                    [0.4, '#A5D6A7'],    # Very light green
-                                    [0.6, '#FFCC80'],    # Light orange
-                                    [0.8, '#FF8A65'],    # Soft orange
-                                    [1, '#FF6B6B']       # Soft red for high values
-                                ],
-                                hoverongaps=False,
-                                hovertemplate="Date: %{x}<br>Failure Rate: %{z:.1f}%<extra></extra>",
-                                showscale=True
-                            ))
-                            
-                            fig_heatmap.update_layout(
-                                title=dict(
-                                    text="Failure Rate Trend",
-                                    x=0.5,
-                                    font=dict(size=16)
-                                ),
-                                height=180,
-                                plot_bgcolor='rgba(0,0,0,0)',
-                                paper_bgcolor='rgba(0,0,0,0)',
-                                margin=dict(l=20, r=20, t=40, b=20),
-                                xaxis=dict(
-                                    showgrid=False,
-                                    zeroline=False
-                                ),
-                                yaxis=dict(
-                                    showgrid=False,
-                                    zeroline=False,
-                                    showticklabels=False
-                                )
-                            )
-                            
-                            st.plotly_chart(fig_heatmap, use_container_width=True)
-                            
-                            # Add improved daily trend chart
-                            st.subheader("📈 Daily Test Case Failure Trends")
-                            
-                            fig_line = go.Figure()
-                            
-                            # Add Total Tests line
-                            fig_line.add_trace(go.Scatter(
-                                x=df_trend["Date"],
-                                y=df_trend["Total Tests"],
-                                name="Total Tests",
-                                line=dict(color="#4CAF50", width=3),
-                                mode='lines+markers'
-                            ))
-                            
-                            # Add Failed Tests line
-                            fig_line.add_trace(go.Scatter(
-                                x=df_trend["Date"],
-                                y=df_trend["Failed Tests"],
-                                name="Failed Tests",
-                                line=dict(color="#FF6B6B", width=3),
-                                mode='lines+markers'
-                            ))
-                            
-                            fig_line.update_layout(
-                                title="Test Execution Trend",
-                                xaxis_title="Date",
-                                yaxis_title="Number of Tests",
-                                hovermode='x unified',
-                                plot_bgcolor='rgba(0,0,0,0)',
-                                paper_bgcolor='rgba(0,0,0,0)',
-                                showlegend=True,
-                                legend=dict(
-                                    orientation="h",
-                                    yanchor="bottom",
-                                    y=1.02,
-                                    xanchor="right",
-                                    x=1
-                                ),
-                                margin=dict(l=20, r=20, t=60, b=20)
-                            )
-                            
-                            fig_line.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
-                            fig_line.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
-                            
-                            st.plotly_chart(fig_line, use_container_width=True)
-
-                            # Add Top 5 Failures Analysis
-                            st.subheader("🎯 Top Failing Test Cases")
-
-                            # Create a DataFrame of all failed tests
-                            failed_tests = [tc for tc in test_data["test_cases"] if tc["verdict"] == "Fail"]
-                            if failed_tests:
-                                df_failed = pd.DataFrame(failed_tests)
+                            if trend_data:
+                                df_trend = pd.DataFrame(trend_data)
+                                df_trend["Date"] = pd.to_datetime(df_trend["Date"])
+                                df_trend = df_trend.sort_values("Date")
                                 
-                                # Count failures by test case
-                                failure_counts = df_failed.groupby(['test_case_id', 'test_case_name']).size().reset_index(name='failures')
-                                failure_counts = failure_counts.sort_values('failures', ascending=False)
+                                # Create modern heatmap
+                                fig_heatmap = go.Figure()
                                 
-                                # Get top 5 failing tests
-                                top_5_failures = failure_counts.head(5)
+                                fig_heatmap.add_trace(go.Heatmap(
+                                    x=df_trend["Date"],
+                                    y=["Failure Rate"],
+                                    z=[df_trend["Failure Rate"]],
+                                    colorscale=[
+                                        [0, '#4CAF50'],      # Softer green for low values
+                                        [0.4, '#A5D6A7'],    # Very light green
+                                        [0.6, '#FFCC80'],    # Light orange
+                                        [0.8, '#FF8A65'],    # Soft orange
+                                        [1, '#FF6B6B']       # Soft red for high values
+                                    ],
+                                    hoverongaps=False,
+                                    hovertemplate="Date: %{x}<br>Failure Rate: %{z:.1f}%<extra></extra>",
+                                    showscale=True
+                                ))
                                 
-                                # Create two columns
-                                fail_col1, fail_col2 = st.columns([2, 1])
-                                
-                                with fail_col1:
-                                    # Create bar chart for top 5 failures
-                                    fig_top_failures = go.Figure()
-                                    
-                                    fig_top_failures.add_trace(go.Bar(
-                                        x=top_5_failures['test_case_id'],
-                                        y=top_5_failures['failures'],
-                                        text=top_5_failures['failures'],
-                                        textposition='auto',
-                                        marker_color='#FF6B6B',  # Softer red color
-                                        hovertemplate=(
-                                            "<b>%{x}</b><br>" +
-                                            "Failures: %{y}<br>" +
-                                            "<extra></extra>"
-                                        )
-                                    ))
-                                    
-                                    fig_top_failures.update_layout(
-                                        title={
-                                            'text': "Top 5 Failing Test Cases",
-                                            'y':0.95,
-                                            'x':0.5,
-                                            'xanchor': 'center',
-                                            'yanchor': 'top'
-                                        },
-                                        xaxis_title="Test Case ID",
-                                        yaxis_title="Number of Failures",
-                                        plot_bgcolor='rgba(0,0,0,0)',
-                                        paper_bgcolor='rgba(0,0,0,0)',
-                                        showlegend=False,
-                                        margin=dict(l=20, r=20, t=40, b=20),
-                                        height=400
+                                fig_heatmap.update_layout(
+                                    title=dict(
+                                        text="Failure Rate Trend",
+                                        x=0.5,
+                                        font=dict(size=16)
+                                    ),
+                                    height=180,
+                                    plot_bgcolor='rgba(0,0,0,0)',
+                                    paper_bgcolor='rgba(0,0,0,0)',
+                                    margin=dict(l=20, r=20, t=40, b=20),
+                                    xaxis=dict(
+                                        showgrid=False,
+                                        zeroline=False
+                                    ),
+                                    yaxis=dict(
+                                        showgrid=False,
+                                        zeroline=False,
+                                        showticklabels=False
                                     )
-                                    
-                                    fig_top_failures.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
-                                    fig_top_failures.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
-                                    
-                                    st.plotly_chart(fig_top_failures, use_container_width=True)
+                                )
                                 
-                                with fail_col2:
-                                    # Most common failing test details
-                                    most_common = failure_counts.iloc[0]
-                                    
-                                    st.markdown("""
-                                        <style>
-                                        .failure-card {
-                                            background-color: #FFF5F5;
-                                            border-radius: 10px;
-                                            padding: 20px;
-                                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                                            margin-bottom: 20px;
-                                        }
-                                        .failure-title {
-                                            color: #C53030;
-                                            font-size: 1.1em;
-                                            font-weight: bold;
-                                            margin-bottom: 15px;
-                                        }
-                                        .failure-metric {
-                                            color: #2D3748;
-                                            font-size: 1.8em;
-                                            font-weight: bold;
-                                            margin: 10px 0;
-                                        }
-                                        .failure-label {
-                                            color: #718096;
-                                            font-size: 0.9em;
-                                        }
-                                        </style>
-                                        """, unsafe_allow_html=True)
-                                    
-                                    st.markdown("""
-                                        <div class="failure-card">
-                                            <div class="failure-title">Most Common Failure</div>
-                                            <div class="failure-label">Test Case ID</div>
-                                            <div class="failure-metric">{}</div>
-                                            <div class="failure-label">Test Name</div>
-                                            <div class="failure-metric" style="font-size: 1.2em">{}</div>
-                                            <div class="failure-label">Failure Count</div>
-                                            <div class="failure-metric">{}</div>
-                                        </div>
-                                    """.format(
-                                        most_common['test_case_id'],
-                                        most_common['test_case_name'][:40] + '...' if len(most_common['test_case_name']) > 40 else most_common['test_case_name'],
-                                        most_common['failures']
-                                    ), unsafe_allow_html=True)
+                                st.plotly_chart(fig_heatmap, use_container_width=True)
+                                
+                                # Add improved daily trend chart
+                                st.subheader("📈 Daily Test Case Failure Trends")
+                                
+                                fig_line = go.Figure()
+                                
+                                # Add Total Tests line
+                                fig_line.add_trace(go.Scatter(
+                                    x=df_trend["Date"],
+                                    y=df_trend["Total Tests"],
+                                    name="Total Tests",
+                                    line=dict(color="#4CAF50", width=3),
+                                    mode='lines+markers'
+                                ))
+                                
+                                # Add Failed Tests line
+                                fig_line.add_trace(go.Scatter(
+                                    x=df_trend["Date"],
+                                    y=df_trend["Failed Tests"],
+                                    name="Failed Tests",
+                                    line=dict(color="#FF6B6B", width=3),
+                                    mode='lines+markers'
+                                ))
+                                
+                                fig_line.update_layout(
+                                    title="Test Execution Trend",
+                                    xaxis_title="Date",
+                                    yaxis_title="Number of Tests",
+                                    hovermode='x unified',
+                                    plot_bgcolor='rgba(0,0,0,0)',
+                                    paper_bgcolor='rgba(0,0,0,0)',
+                                    showlegend=True,
+                                    legend=dict(
+                                        orientation="h",
+                                        yanchor="bottom",
+                                        y=1.02,
+                                        xanchor="right",
+                                        x=1
+                                    ),
+                                    margin=dict(l=20, r=20, t=60, b=20)
+                                )
+                                
+                                fig_line.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+                                fig_line.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+                                
+                                st.plotly_chart(fig_line, use_container_width=True)
 
+                                # Add Top 5 Failures Analysis
+                                st.subheader("🎯 Top Failing Test Cases")
+
+                                # Create a DataFrame of all failed tests
+                                failed_tests = [tc for tc in test_data["test_cases"] if tc["verdict"] == "Fail"]
+                                if failed_tests:
+                                    df_failed = pd.DataFrame(failed_tests)
+                                    
+                                    # Count failures by test case
+                                    failure_counts = df_failed.groupby(['test_case_id', 'test_case_name']).size().reset_index(name='failures')
+                                    failure_counts = failure_counts.sort_values('failures', ascending=False)
+                                    
+                                    # Get top 5 failing tests
+                                    top_5_failures = failure_counts.head(5)
+                                    
+                                    # Create two columns
+                                    fail_col1, fail_col2 = st.columns([2, 1])
+                                    
+                                    with fail_col1:
+                                        # Create bar chart for top 5 failures
+                                        fig_top_failures = go.Figure()
+                                        
+                                        fig_top_failures.add_trace(go.Bar(
+                                            x=top_5_failures['test_case_id'],
+                                            y=top_5_failures['failures'],
+                                            text=top_5_failures['failures'],
+                                            textposition='auto',
+                                            marker_color='#FF6B6B',  # Softer red color
+                                            hovertemplate=(
+                                                "<b>%{x}</b><br>" +
+                                                "Failures: %{y}<br>" +
+                                                "<extra></extra>"
+                                            )
+                                        ))
+                                        
+                                        fig_top_failures.update_layout(
+                                            title={
+                                                'text': "Top 5 Failing Test Cases",
+                                                'y':0.95,
+                                                'x':0.5,
+                                                'xanchor': 'center',
+                                                'yanchor': 'top'
+                                            },
+                                            xaxis_title="Test Case ID",
+                                            yaxis_title="Number of Failures",
+                                            plot_bgcolor='rgba(0,0,0,0)',
+                                            paper_bgcolor='rgba(0,0,0,0)',
+                                            showlegend=False,
+                                            margin=dict(l=20, r=20, t=40, b=20),
+                                            height=400
+                                        )
+                                        
+                                        fig_top_failures.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+                                        fig_top_failures.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+                                        
+                                        st.plotly_chart(fig_top_failures, use_container_width=True)
+                                    
+                                    with fail_col2:
+                                        # Most common failing test details
+                                        most_common = failure_counts.iloc[0]
+                                        
+                                        st.markdown("""
+                                            <style>
+                                            .failure-card {
+                                                background-color: #FFF5F5;
+                                                border-radius: 10px;
+                                                padding: 20px;
+                                                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                                                margin-bottom: 20px;
+                                            }
+                                            .failure-title {
+                                                color: #C53030;
+                                                font-size: 1.1em;
+                                                font-weight: bold;
+                                                margin-bottom: 15px;
+                                            }
+                                            .failure-metric {
+                                                color: #2D3748;
+                                                font-size: 1.8em;
+                                                font-weight: bold;
+                                                margin: 10px 0;
+                                            }
+                                            .failure-label {
+                                                color: #718096;
+                                                font-size: 0.9em;
+                                            }
+                                            </style>
+                                            """, unsafe_allow_html=True)
+                                        
+                                        st.markdown("""
+                                            <div class="failure-card">
+                                                <div class="failure-title">Most Common Failure</div>
+                                                <div class="failure-label">Test Case ID</div>
+                                                <div class="failure-metric">{}</div>
+                                                <div class="failure-label">Test Name</div>
+                                                <div class="failure-metric" style="font-size: 1.2em">{}</div>
+                                                <div class="failure-label">Failure Count</div>
+                                                <div class="failure-metric">{}</div>
+                                            </div>
+                                        """.format(
+                                            most_common['test_case_id'],
+                                            most_common['test_case_name'][:40] + '...' if len(most_common['test_case_name']) > 40 else most_common['test_case_name'],
+                                            most_common['failures']
+                                        ), unsafe_allow_html=True)
+
+                                else:
+                                    st.info("No failed tests found for this user story")
                             else:
-                                st.info("No failed tests found for this user story")
+                                st.info("No trend data available for the selected time period")
                         else:
-                            st.info("No trend data available for the selected time period")
-                    else:
-                        st.info("No failure trend data available")
+                            st.info("No failure trend data available")
                     
                     # Continue with existing Azure System Failure Section
                     st.subheader("Azure System Failure Analysis")

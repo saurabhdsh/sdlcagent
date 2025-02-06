@@ -329,7 +329,6 @@ def get_rally_user_stories(workspace_id: str, project_id: str) -> List[Dict[str,
         return []
 
 def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) -> Dict[str, Any]:
-    """Fetch test cases and defects for a specific user story"""
     try:
         session = requests.Session()
         session.verify = False
@@ -411,7 +410,7 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
         
         test_data["total_tests"] = len(all_test_cases)
         
-        # Process each test case and get its latest result
+        # Process test cases with better error handling
         for test_case in all_test_cases:
             try:
                 test_case_id = test_case.get('FormattedID', 'Unknown')
@@ -419,38 +418,7 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
                 
                 test_case_name = test_case.get('Name', 'Unnamed Test')
                 verdict = test_case.get('LastVerdict', 'No Run')
-                
-                # Get the latest test case result with better error handling
-                tcr_params = {
-                    "workspace": f"/workspace/{workspace_id}",
-                    "query": f"(TestCase.FormattedID = {test_case_id})",
-                    "fetch": "ObjectID,Date,Verdict",
-                    "pagesize": 1,
-                    "order": "Date DESC"
-                }
-                
-                tcr_id = 'N/A'
-                date_time = 'N/A'
-                
-                try:
-                    tcr_response = session.get(
-                        f"{base_endpoint}/testcaseresult",
-                        params=tcr_params
-                    )
-                    
-                    if tcr_response and tcr_response.status_code == 200:
-                        tcr_data = tcr_response.json()
-                        if tcr_data and isinstance(tcr_data, dict):
-                            query_result = tcr_data.get('QueryResult', {})
-                            if query_result and isinstance(query_result, dict):
-                                tcr_results = query_result.get('Results', [])
-                                if tcr_results and len(tcr_results) > 0:
-                                    latest_result = tcr_results[0]
-                                    tcr_id = latest_result.get('ObjectID', 'N/A')
-                                    date_time = latest_result.get('Date', 'N/A')
-                                    verdict = latest_result.get('Verdict', verdict)
-                except Exception as e:
-                    print(f"Error processing test case result for {test_case_id}: {str(e)}")
+                date_time = test_case.get('LastRun', 'N/A')
                 
                 # Update counters based on verdict
                 if verdict == 'Pass':
@@ -461,89 +429,28 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
                     test_data["other"] += 1
                 
                 # Add test case to the list with safe data
-                test_data["test_cases"].append({
+                test_case_data = {
                     "test_case_id": test_case_id,
                     "test_case_name": test_case_name,
-                    "tcr_id": tcr_id,
+                    "tcr_id": test_case.get('ObjectID', 'N/A'),
                     "date_time": date_time,
-                    "verdict": verdict
-                })
+                    "verdict": verdict,
+                    "LastBuild": test_case.get('LastBuild', 'Unknown'),
+                    "Duration": test_case.get('Duration', 'N/A'),
+                    "Owner": test_case.get('Owner', {}).get('_refObjectName', 'Unassigned')
+                }
+                test_data["test_cases"].append(test_case_data)
                 
             except Exception as e:
                 print(f"Error processing test case {test_case.get('FormattedID', 'Unknown')}: {str(e)}")
                 continue
         
-        # Calculate statistics safely
-        if all_test_cases:
-            try:
-                automated_count = len([tc for tc in all_test_cases 
-                                    if tc.get('Method', '').lower() == 'automated' or 
-                                    tc.get('Type', '').lower() == 'automated'])
-                
-                execution_times = []
-                for tc in all_test_cases:
-                    last_result = tc.get('LastResult', {})
-                    if last_result and isinstance(last_result, dict):
-                        try:
-                            duration = float(last_result.get('Duration', 0) or 0)
-                            if duration > 0:
-                                execution_times.append(duration)
-                        except (ValueError, TypeError):
-                            pass
-                
-                avg_time = sum(execution_times) / len(execution_times) if execution_times else 0
-                
-                test_data["statistics"] = {
-                    "automation_coverage": (automated_count / len(all_test_cases) * 100) if len(all_test_cases) > 0 else 0,
-                    "flaky_tests": len([tc for tc in test_data["test_cases"] 
-                                    if tc["verdict"] == 'Fail' and 
-                                    any(prev["verdict"] == 'Pass' for prev in test_data["test_cases"])]),
-                    "never_run": len([tc for tc in all_test_cases 
-                                    if not tc.get('LastRun') or 
-                                    not tc.get('LastResult')]),
-                    "avg_execution_time": avg_time
-                }
-            except Exception as e:
-                print(f"Error calculating statistics: {str(e)}")
-                test_data["statistics"] = {}
-        
         # Calculate pass percentage safely
         if test_data["total_tests"] > 0:
             test_data["pass_percentage"] = (test_data["passed"] / test_data["total_tests"]) * 100
         
-        # Fetch defects (keeping existing defect fetching logic)
-        defect_query_url = f"{base_endpoint}/defect"
-        defect_params = {
-            "workspace": f"/workspace/{workspace_id}",
-            "query": f"(Requirement.ObjectID = {story_id})",
-            "fetch": "ObjectID,Name,State,Priority,Severity",
-            "pagesize": 100
-        }
-        
-        defect_response = session.get(
-            defect_query_url,
-            params=defect_params
-        )
-        
-        if defect_response.status_code == 200:
-            defects = defect_response.json().get('QueryResult', {}).get('Results', [])
-            test_data["defects"] = [{
-                "name": defect.get('Name', 'Unnamed Defect'),
-                "state": defect.get('State', 'Unknown'),
-                "priority": defect.get('Priority', 'None'),
-                "severity": defect.get('Severity', 'None')
-            } for defect in defects]
-        
-        print(f"Final test data summary:")
-        print(f"Total Tests: {test_data['total_tests']}")
-        print(f"Passed: {test_data['passed']}")
-        print(f"Failed: {test_data['failed']}")
-        print(f"Other: {test_data['other']}")
-        
-        # Calculate failure trends for last 10 days
+        # Initialize and calculate failure trends
         today = datetime.now()
-        
-        # Initialize 10-day trend
         for i in range(10):
             date = (today - timedelta(days=i)).strftime('%Y-%m-%d')
             test_data["failure_trend"][date] = {
@@ -553,24 +460,27 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
                 "failure_details": []
             }
         
-        # Process test results for trend
+        # Process test results for trend with better error handling
         for test_case in test_data["test_cases"]:
-            if test_case["date_time"] != 'N/A':
-                date = test_case["date_time"].split('T')[0]
-                if date in test_data["failure_trend"]:
-                    test_data["failure_trend"][date]["total"] += 1
-                    if test_case["verdict"] == 'Fail':
-                        test_data["failure_trend"][date]["failed"] += 1
-                        # Add more detailed failure information
-                        test_data["failure_trend"][date]["failure_details"].append({
-                            "test_case_id": test_case["test_case_id"],
-                            "test_case_name": test_case["test_case_name"],
-                            "build": test_case.get("LastBuild", "Unknown"),
-                            "execution_time": test_case.get("Duration", "N/A"),
-                            "owner": test_case.get("Owner", {}).get("_refObjectName", "Unassigned")
-                        })
+            try:
+                if test_case["date_time"] and test_case["date_time"] != 'N/A':
+                    date = test_case["date_time"].split('T')[0] if 'T' in test_case["date_time"] else test_case["date_time"]
+                    if date in test_data["failure_trend"]:
+                        test_data["failure_trend"][date]["total"] += 1
+                        if test_case["verdict"] == 'Fail':
+                            test_data["failure_trend"][date]["failed"] += 1
+                            test_data["failure_trend"][date]["failure_details"].append({
+                                "test_case_id": test_case["test_case_id"],
+                                "test_case_name": test_case["test_case_name"],
+                                "build": test_case.get("LastBuild", "Unknown"),
+                                "execution_time": test_case.get("Duration", "N/A"),
+                                "owner": test_case.get("Owner", "Unassigned")
+                            })
+            except Exception as e:
+                print(f"Error processing trend data for test case {test_case.get('test_case_id', 'Unknown')}: {str(e)}")
+                continue
         
-        # Calculate failure rates
+        # Calculate failure rates safely
         for date in test_data["failure_trend"]:
             total = test_data["failure_trend"][date]["total"]
             if total > 0:
@@ -594,7 +504,19 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
         
     except Exception as e:
         logging.error(f"Error fetching test data: {str(e)}")
-        return None
+        # Return default structure instead of None
+        return {
+            "total_tests": 0,
+            "passed": 0,
+            "failed": 0,
+            "other": 0,
+            "test_cases": [],
+            "defects": [],
+            "pass_percentage": 0,
+            "statistics": {},
+            "failure_trend": {},
+            "daily_trend": {}
+        }
 
 def get_project_rca_data(workspace_id: str, project_id: str) -> Dict[str, Any]:
     """Fetch defects and their root causes for RCA analysis"""
