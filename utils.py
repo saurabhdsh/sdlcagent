@@ -342,7 +342,7 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
         if not base_endpoint.endswith('/slm/webservice/v2.0'):
             base_endpoint = f"{base_endpoint}/slm/webservice/v2.0"
         
-        # Initialize test data structure with defaults
+        # Initialize default test data structure
         test_data = {
             "total_tests": 0,
             "passed": 0,
@@ -408,6 +408,11 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
         print(f"Fetching test cases for story {story_id}")
         print(f"Total test cases found: {len(all_test_cases)}")
         
+        # Add better error handling for test case fetching
+        if not all_test_cases:
+            print(f"No test cases found for story {story_id}")
+            return test_data
+
         test_data["total_tests"] = len(all_test_cases)
         
         # Process test cases with better error handling
@@ -416,6 +421,7 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
                 test_case_id = test_case.get('FormattedID', 'Unknown')
                 print(f"Processing test case: {test_case_id}")
                 
+                # Safely get test case data with defaults
                 test_case_name = test_case.get('Name', 'Unnamed Test')
                 verdict = test_case.get('LastVerdict', 'No Run')
                 date_time = test_case.get('LastRun', 'N/A')
@@ -433,7 +439,7 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
                     "test_case_id": test_case_id,
                     "test_case_name": test_case_name,
                     "tcr_id": test_case.get('ObjectID', 'N/A'),
-                    "date_time": date_time,
+                    "date_time": date_time if date_time else 'N/A',
                     "verdict": verdict,
                     "LastBuild": test_case.get('LastBuild', 'Unknown'),
                     "Duration": test_case.get('Duration', 'N/A'),
@@ -504,7 +510,6 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
         
     except Exception as e:
         logging.error(f"Error fetching test data: {str(e)}")
-        # Return default structure instead of None
         return {
             "total_tests": 0,
             "passed": 0,
