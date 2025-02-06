@@ -575,96 +575,110 @@ elif ops_agents_enabled and selected_ops == "🔍 Failure Analysis":
                             use_container_width=True
                         )
 
-                    # Add Test Case Statistics section
+                    # Add Test Case Statistics section with proper error handling
                     st.subheader("📊 Test Case Statistics")
                     stats_col1, stats_col2, stats_col3, stats_col4 = st.columns(4)
                     
+                    # Get statistics safely with defaults
+                    statistics = test_data.get("statistics", {})
+                    
                     with stats_col1:
+                        automation_coverage = statistics.get("automation_coverage", 0)
                         st.metric(
                             "Automation Coverage",
-                            f"{test_data['statistics']['automation_coverage']:.1f}%"
+                            f"{automation_coverage:.1f}%"
                         )
                     
                     with stats_col2:
+                        flaky_tests = statistics.get("flaky_tests", 0)
                         st.metric(
                             "Flaky Tests",
-                            test_data['statistics']['flaky_tests']
+                            flaky_tests
                         )
                     
                     with stats_col3:
+                        never_run = statistics.get("never_run", 0)
                         st.metric(
                             "Never Run",
-                            test_data['statistics']['never_run']
+                            never_run
                         )
                     
                     with stats_col4:
+                        avg_execution_time = statistics.get("avg_execution_time", 0)
                         st.metric(
                             "Avg. Execution Time",
-                            f"{test_data['statistics']['avg_execution_time']:.1f}s"
+                            f"{avg_execution_time:.1f}s"
                         )
                     
-                    # Add Failure Trend Heatmap
+                    # Add Failure Trend Heatmap with error handling
                     st.subheader("🔥 Test Case Failure Trend (Last 10 Days)")
                     
-                    # Create heatmap data
-                    trend_data = []
-                    for date, data in test_data["failure_trend"].items():
-                        trend_data.append({
-                            "Date": date,
-                            "Total Tests": data["total"],
-                            "Failed Tests": data["failed"],
-                            "Failure Rate": data["failure_rate"]
-                        })
-                    
-                    df_trend = pd.DataFrame(trend_data)
-                    df_trend["Date"] = pd.to_datetime(df_trend["Date"])
-                    df_trend = df_trend.sort_values("Date")
-                    
-                    # Create heatmap using plotly
-                    fig = px.imshow(
-                        df_trend[["Failure Rate"]].T,
-                        x=df_trend["Date"],
-                        color_continuous_scale="RdYlGn_r",
-                        labels=dict(x="Date", y="Metric", color="Failure Rate %"),
-                        aspect="auto"
-                    )
-                    
-                    fig.update_layout(
-                        height=200,
-                        margin=dict(l=20, r=20, t=20, b=20)
-                    )
-                    
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Add heatmap explanation
-                    st.info("""
-                        📖 **How to Read the Heatmap:**
-                        - **Color Intensity**: Darker red indicates higher failure rates, while darker green shows lower failure rates
-                        - **Daily Progression**: Left to right shows the trend over the last 10 days
-                        - **Quick Insights**: Spot patterns and identify days with unusual failure rates
-                    """)
-                    
-                    # Add Daily Trend Chart
-                    st.subheader("📈 Daily Test Case Failure Trends")
-                    
-                    # Create line chart
-                    fig_line = px.line(
-                        df_trend,
-                        x="Date",
-                        y=["Total Tests", "Failed Tests"],
-                        title="Test Execution Trend",
-                        labels={"value": "Count", "variable": "Metric"},
-                        color_discrete_sequence=["#2E7D32", "#C62828"]
-                    )
-                    
-                    fig_line.update_layout(
-                        xaxis_title="Date",
-                        yaxis_title="Number of Tests",
-                        legend_title="Metrics",
-                        hovermode='x unified'
-                    )
-                    
-                    st.plotly_chart(fig_line, use_container_width=True)
+                    failure_trend = test_data.get("failure_trend", {})
+                    if failure_trend:
+                        # Create heatmap data
+                        trend_data = []
+                        for date, data in failure_trend.items():
+                            trend_data.append({
+                                "Date": date,
+                                "Total Tests": data.get("total", 0),
+                                "Failed Tests": data.get("failed", 0),
+                                "Failure Rate": data.get("failure_rate", 0)
+                            })
+                        
+                        if trend_data:  # Only create visualization if we have data
+                            df_trend = pd.DataFrame(trend_data)
+                            df_trend["Date"] = pd.to_datetime(df_trend["Date"])
+                            df_trend = df_trend.sort_values("Date")
+                            
+                            # Create heatmap using plotly
+                            fig = px.imshow(
+                                df_trend[["Failure Rate"]].T,
+                                x=df_trend["Date"],
+                                color_continuous_scale="RdYlGn_r",
+                                labels=dict(x="Date", y="Metric", color="Failure Rate %"),
+                                aspect="auto"
+                            )
+                            
+                            fig.update_layout(
+                                height=200,
+                                margin=dict(l=20, r=20, t=20, b=20)
+                            )
+                            
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                            # Add heatmap explanation
+                            st.info("""
+                                📖 **How to Read the Heatmap:**
+                                - **Color Intensity**: Darker red indicates higher failure rates, while darker green shows lower failure rates
+                                - **Daily Progression**: Left to right shows the trend over the last 10 days
+                                - **Quick Insights**: Spot patterns and identify days with unusual failure rates
+                            """)
+                            
+                            # Add Daily Trend Chart
+                            st.subheader("📈 Daily Test Case Failure Trends")
+                            
+                            # Create line chart
+                            fig_line = px.line(
+                                df_trend,
+                                x="Date",
+                                y=["Total Tests", "Failed Tests"],
+                                title="Test Execution Trend",
+                                labels={"value": "Count", "variable": "Metric"},
+                                color_discrete_sequence=["#2E7D32", "#C62828"]
+                            )
+                            
+                            fig_line.update_layout(
+                                xaxis_title="Date",
+                                yaxis_title="Number of Tests",
+                                legend_title="Metrics",
+                                hovermode='x unified'
+                            )
+                            
+                            st.plotly_chart(fig_line, use_container_width=True)
+                        else:
+                            st.info("No trend data available for the selected time period")
+                    else:
+                        st.info("No failure trend data available")
                     
                     # Continue with existing Azure System Failure Section
                     st.subheader("Azure System Failure Analysis")

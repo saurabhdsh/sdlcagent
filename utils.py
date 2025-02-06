@@ -367,7 +367,9 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
                 "workspace": f"/workspace/{workspace_id}",
                 "project": f"/project/{project_id}",
                 "query": f"(WorkProduct.FormattedID = \"{story_id}\")",
-                "fetch": "FormattedID,Name,LastVerdict,LastRun,ObjectID,Type,Duration,Method,Priority,Owner,TestCaseStatus,LastBuild",
+                "fetch": ("FormattedID,Name,LastVerdict,LastRun,ObjectID,Type,Duration,Method," +
+                        "Priority,Owner,TestCaseStatus,LastBuild,LastResult,Results," +
+                        "LastRun,LastResultDate,LastUpdateDate"),
                 "pagesize": page_size,
                 "start": start,
                 "order": "FormattedID ASC"
@@ -491,25 +493,47 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
         print(f"Other: {test_data['other']}")
         
         # After processing all test cases, calculate statistics
-        test_data["statistics"] = {
-            "automation_coverage": (len([tc for tc in all_test_cases if tc.get('Method', '').lower() == 'automated']) / len(all_test_cases) * 100) if all_test_cases else 0,
-            "flaky_tests": len([tc for tc in test_data["test_cases"] if tc["verdict"] == 'Fail' and any(prev["verdict"] == 'Pass' for prev in test_data["test_cases"])]),
-            "never_run": len([tc for tc in test_data["test_cases"] if tc["verdict"] == 'No Run' or not tc.get('LastRun')]),
-            "avg_execution_time": sum([float(tc.get('Duration', 0) or 0) for tc in all_test_cases]) / len(all_test_cases) if all_test_cases else 0,
-            "priority_distribution": {
-                "High": len([tc for tc in all_test_cases if tc.get('Priority', '').lower() == 'high']),
-                "Medium": len([tc for tc in all_test_cases if tc.get('Priority', '').lower() == 'medium']),
-                "Low": len([tc for tc in all_test_cases if tc.get('Priority', '').lower() == 'low'])
-            },
-            "status_distribution": {
-                status: len([tc for tc in all_test_cases if tc.get('TestCaseStatus', '') == status])
-                for status in set(tc.get('TestCaseStatus', '') for tc in all_test_cases if tc.get('TestCaseStatus'))
-            },
-            "owner_distribution": {
-                owner: len([tc for tc in all_test_cases if tc.get('Owner', {}).get('_refObjectName', '') == owner])
-                for owner in set(tc.get('Owner', {}).get('_refObjectName', '') for tc in all_test_cases if tc.get('Owner'))
+        if all_test_cases:
+            automated_count = len([tc for tc in all_test_cases 
+                                 if tc.get('Method', '').lower() == 'automated' or 
+                                    tc.get('Type', '').lower() == 'automated'])
+            
+            # Calculate execution times from Results
+            execution_times = []
+            for tc in all_test_cases:
+                if tc.get('LastResult', {}).get('Duration'):
+                    try:
+                        duration = float(tc['LastResult']['Duration'])
+                        execution_times.append(duration)
+                    except (ValueError, TypeError):
+                        pass
+            
+            avg_time = sum(execution_times) / len(execution_times) if execution_times else 0
+            
+            test_data["statistics"] = {
+                "automation_coverage": (automated_count / len(all_test_cases) * 100),
+                "flaky_tests": len([tc for tc in test_data["test_cases"] 
+                                  if tc["verdict"] == 'Fail' and 
+                                  any(prev["verdict"] == 'Pass' for prev in test_data["test_cases"])]),
+                "never_run": len([tc for tc in all_test_cases 
+                                if not tc.get('LastRun') or 
+                                not tc.get('LastResult')]),
+                "avg_execution_time": avg_time,
+                "priority_distribution": {
+                    "High": len([tc for tc in all_test_cases if tc.get('Priority', '').lower() == 'high']),
+                    "Medium": len([tc for tc in all_test_cases if tc.get('Priority', '').lower() == 'medium']),
+                    "Low": len([tc for tc in all_test_cases if tc.get('Priority', '').lower() == 'low'])
+                },
+                "status_distribution": {
+                    status: len([tc for tc in all_test_cases if tc.get('TestCaseStatus', '') == status])
+                    for status in set(tc.get('TestCaseStatus', '') for tc in all_test_cases if tc.get('TestCaseStatus'))
+                },
+                "owner_distribution": {
+                    owner.get('_refObjectName', 'Unassigned'): len([tc for tc in all_test_cases 
+                        if tc.get('Owner', {}).get('_refObjectName') == owner.get('_refObjectName')])
+                    for owner in set([tc.get('Owner', {}) for tc in all_test_cases if tc.get('Owner')])
+                }
             }
-        }
         
         # Calculate failure trends for last 10 days
         today = datetime.now()
@@ -532,12 +556,14 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
                     test_data["failure_trend"][date]["total"] += 1
                     if test_case["verdict"] == 'Fail':
                         test_data["failure_trend"][date]["failed"] += 1
-                    # Store additional failure details
-                    test_data["failure_trend"][date]["failure_details"].append({
-                        "test_case_id": test_case["test_case_id"],
-                        "test_case_name": test_case["test_case_name"],
-                        "build": test_case.get("LastBuild", "Unknown")
-                    })
+                        # Add more detailed failure information
+                        test_data["failure_trend"][date]["failure_details"].append({
+                            "test_case_id": test_case["test_case_id"],
+                            "test_case_name": test_case["test_case_name"],
+                            "build": test_case.get("LastBuild", "Unknown"),
+                            "execution_time": test_case.get("Duration", "N/A"),
+                            "owner": test_case.get("Owner", {}).get("_refObjectName", "Unassigned")
+                        })
         
         # Calculate failure rates
         for date in test_data["failure_trend"]:
