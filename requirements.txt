@@ -1,0 +1,10 @@
+streamlit
+streamlit-option-menu
+requests
+openai
+PyPDF2
+pyral>=1.4.0
+flask
+pandas
+plotly
+
