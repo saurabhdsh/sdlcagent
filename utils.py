@@ -360,9 +360,8 @@ def get_rally_user_stories(workspace_id: str, project_id: str) -> List[Dict[str,
 def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) -> Dict[str, Any]:
     """Fetch test cases and defects for a specific user story"""
     try:
-        # Configure session with SSL verification settings
         session = requests.Session()
-        session.verify = False  # Only if your Rally instance requires this
+        session.verify = False
         session.headers.update({
             "zsessionid": config['rally_api_key'],
             "Content-Type": "application/json",
@@ -372,6 +371,26 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
         base_endpoint = config['rally_endpoint'].rstrip('/')
         if not base_endpoint.endswith('/slm/webservice/v2.0'):
             base_endpoint = f"{base_endpoint}/slm/webservice/v2.0"
+        
+        # First get the user story to get its FormattedID
+        story_response = session.get(
+            f"{base_endpoint}/hierarchicalrequirement/{story_id}",
+            params={
+                "workspace": f"/workspace/{workspace_id}",
+                "fetch": "FormattedID"
+            }
+        )
+        
+        if story_response.status_code != 200:
+            print(f"Error fetching user story: {story_response.status_code}")
+            return None
+            
+        story_formatted_id = story_response.json().get('HierarchicalRequirement', {}).get('FormattedID')
+        if not story_formatted_id:
+            print("Could not get story FormattedID")
+            return None
+            
+        print(f"Found story ID: {story_formatted_id}")
         
         # Initialize test data structure
         test_data = {
@@ -387,18 +406,20 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
         # Fetch all test cases with pagination
         all_test_cases = []
         start = 1
-        page_size = 100
+        page_size = 200  # Increased page size
         
         while True:
             test_case_params = {
                 "workspace": f"/workspace/{workspace_id}",
                 "project": f"/project/{project_id}",
-                "query": f"(WorkProduct.FormattedID = {story_id})",
+                "query": f"(WorkProduct.FormattedID = \"{story_formatted_id}\")",  # Added quotes
                 "fetch": "FormattedID,Name,LastVerdict,LastRun,ObjectID",
                 "pagesize": page_size,
                 "start": start,
                 "order": "FormattedID ASC"
             }
+            
+            print(f"Fetching test cases with params: {test_case_params}")
             
             test_case_response = session.get(
                 f"{base_endpoint}/testcase",
@@ -410,6 +431,9 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
                 page_test_cases = result_data.get('Results', [])
                 total_results = result_data.get('TotalResultCount', 0)
                 
+                print(f"Found {len(page_test_cases)} test cases on this page")
+                print(f"Total results available: {total_results}")
+                
                 if not page_test_cases:
                     break
                     
@@ -420,6 +444,8 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
                     
                 start += page_size
             else:
+                print(f"Error fetching test cases: {test_case_response.status_code}")
+                print(f"Response: {test_case_response.text}")
                 break
         
         # Add debug logging
