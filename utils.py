@@ -269,92 +269,62 @@ def get_rally_projects(workspace_id: str) -> List[Dict[str, str]]:
         return []
 
 def get_rally_user_stories(workspace_id: str, project_id: str) -> List[Dict[str, Any]]:
-    """
-    Fetch user stories from Rally for a specific project
-    """
+    """Fetch user stories from Rally"""
     try:
         base_endpoint = config['rally_endpoint'].rstrip('/')
         if not base_endpoint.endswith('/slm/webservice/v2.0'):
             base_endpoint = f"{base_endpoint}/slm/webservice/v2.0"
-       
-        base_endpoint = base_endpoint.split('#')[0]
-       
+        
         headers = {
             "zsessionid": config['rally_api_key'],
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
-       
-        # First get the workspace reference
-        workspace_url = f"{base_endpoint}/workspace/{workspace_id}"
-        workspace_response = requests.get(
-            workspace_url,
-            headers=headers,
-            verify=True
-        )
-       
-        if workspace_response.status_code != 200:
-            print(f"Failed to fetch workspace. Status: {workspace_response.status_code}")
-            return []
-           
-        workspace_data = workspace_response.json()
-        workspace_ref = workspace_data.get('Workspace', {}).get('_ref', '')
-       
-        if not workspace_ref:
-            print("No workspace reference found")
-            return []
-       
-        # Query for hierarchical requirements (user stories)
-        query_url = f"{base_endpoint}/hierarchicalrequirement"
+        
         params = {
-            "workspace": workspace_ref,  # Use the full workspace reference
-            "project": f"/project/{project_id}",  # Use proper project reference
+            "workspace": f"/workspace/{workspace_id}",
+            "project": f"/project/{project_id}",
             "fetch": "Name,Description,FormattedID,ObjectID,PlanEstimate,Owner,Tags",
             "pagesize": 100,
             "order": "CreationDate DESC"
         }
-       
-        print(f"Fetching user stories from: {query_url}")
+        
+        print(f"Fetching user stories from: {base_endpoint}/hierarchicalrequirement")
         print(f"Query parameters: {params}")
-       
+        
         response = requests.get(
-            query_url,
+            f"{base_endpoint}/hierarchicalrequirement",
             headers=headers,
             params=params,
-            verify=True
+            verify=False
         )
-       
+        
         print(f"User Stories API Response Status: {response.status_code}")
         print(f"Full URL called: {response.url}")
-       
+        
         if response.status_code == 200:
             response_data = response.json()
-            if 'Errors' in response_data.get('QueryResult', {}) and response_data['QueryResult']['Errors']:
-                print(f"API returned errors: {response_data['QueryResult']['Errors']}")
-                return []
-           
             stories = response_data.get('QueryResult', {}).get('Results', [])
             story_list = []
             for story in stories:
                 story_id = story.get('FormattedID', '')
                 story_name = story.get('Name', 'Untitled Story')
                 story_desc = story.get('Description', '')
-               
+                
                 # Create a formatted story entry
                 story_list.append({
-                    "id": story.get('ObjectID'),
+                    "id": story_id,  # Changed to use FormattedID instead of ObjectID
                     "formatted_id": story_id,
                     "name": story_name,
                     "description": story_desc,
                     "display_name": f"{story_id}: {story_name}"
                 })
-           
+            
             print(f"Found {len(story_list)} user stories")
             return story_list
-           
+            
     except Exception as e:
         print(f"Error fetching user stories: {str(e)}")
-        print(f"Full error: {str(e.__class__.__name__)}: {str(e)}")
         return []
 
 def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) -> Dict[str, Any]:
@@ -372,26 +342,6 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
         if not base_endpoint.endswith('/slm/webservice/v2.0'):
             base_endpoint = f"{base_endpoint}/slm/webservice/v2.0"
         
-        # First get the user story to get its FormattedID
-        story_response = session.get(
-            f"{base_endpoint}/hierarchicalrequirement/{story_id}",
-            params={
-                "workspace": f"/workspace/{workspace_id}",
-                "fetch": "FormattedID"
-            }
-        )
-        
-        if story_response.status_code != 200:
-            print(f"Error fetching user story: {story_response.status_code}")
-            return None
-            
-        story_formatted_id = story_response.json().get('HierarchicalRequirement', {}).get('FormattedID')
-        if not story_formatted_id:
-            print("Could not get story FormattedID")
-            return None
-            
-        print(f"Found story ID: {story_formatted_id}")
-        
         # Initialize test data structure
         test_data = {
             "total_tests": 0,
@@ -406,20 +356,21 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
         # Fetch all test cases with pagination
         all_test_cases = []
         start = 1
-        page_size = 200  # Increased page size
+        page_size = 200
         
         while True:
             test_case_params = {
                 "workspace": f"/workspace/{workspace_id}",
                 "project": f"/project/{project_id}",
-                "query": f"(WorkProduct.FormattedID = \"{story_formatted_id}\")",  # Added quotes
+                "query": f"(WorkProduct.FormattedID = \"{story_id}\")",  # Use story_id directly as FormattedID
                 "fetch": "FormattedID,Name,LastVerdict,LastRun,ObjectID",
                 "pagesize": page_size,
                 "start": start,
                 "order": "FormattedID ASC"
             }
             
-            print(f"Fetching test cases with params: {test_case_params}")
+            print(f"Fetching test cases for story {story_id}")
+            print(f"Query parameters: {test_case_params}")
             
             test_case_response = session.get(
                 f"{base_endpoint}/testcase",
