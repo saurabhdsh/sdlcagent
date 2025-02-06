@@ -18,6 +18,7 @@ import pandas as pd
 import plotly.express as px
 import urllib3
 import warnings
+import plotly.graph_objects as go
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -575,47 +576,91 @@ elif ops_agents_enabled and selected_ops == "🔍 Failure Analysis":
                             use_container_width=True
                         )
 
-                    # Add Test Case Statistics section with proper error handling
+                    # Add Test Case Statistics section
                     st.subheader("📊 Test Case Statistics")
-                    stats_col1, stats_col2, stats_col3, stats_col4 = st.columns(4)
-                    
-                    # Get statistics safely with defaults
-                    statistics = test_data.get("statistics", {})
-                    
-                    with stats_col1:
-                        automation_coverage = statistics.get("automation_coverage", 0)
-                        st.metric(
-                            "Automation Coverage",
-                            f"{automation_coverage:.1f}%"
+
+                    # Create two columns for charts
+                    chart_col1, chart_col2 = st.columns(2)
+
+                    with chart_col1:
+                        # Create Pass vs Fail Bar Chart
+                        status_data = {
+                            'Status': ['Passed', 'Failed', 'Other'],
+                            'Count': [
+                                test_data.get("passed", 0),
+                                test_data.get("failed", 0),
+                                test_data.get("other", 0)
+                            ]
+                        }
+                        df_status = pd.DataFrame(status_data)
+                        
+                        fig_bar = px.bar(
+                            df_status,
+                            x='Status',
+                            y='Count',
+                            title='Test Case Status Distribution',
+                            color='Status',
+                            color_discrete_map={
+                                'Passed': '#2E7D32',
+                                'Failed': '#C62828',
+                                'Other': '#FFA726'
+                            }
                         )
-                    
-                    with stats_col2:
-                        flaky_tests = statistics.get("flaky_tests", 0)
-                        st.metric(
-                            "Flaky Tests",
-                            flaky_tests
+                        
+                        fig_bar.update_layout(
+                            showlegend=False,
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            title_x=0.5,
+                            title_font_size=16,
+                            margin=dict(t=40, b=20, l=20, r=20)
                         )
-                    
-                    with stats_col3:
-                        never_run = statistics.get("never_run", 0)
-                        st.metric(
-                            "Never Run",
-                            never_run
+                        
+                        st.plotly_chart(fig_bar, use_container_width=True)
+
+                    with chart_col2:
+                        # Create Test Case Distribution Pie Chart
+                        total = test_data.get("total_tests", 0)
+                        passed = test_data.get("passed", 0)
+                        failed = test_data.get("failed", 0)
+                        other = test_data.get("other", 0)
+                        
+                        pie_data = {
+                            'Category': ['Passed', 'Failed', 'Other'],
+                            'Percentage': [
+                                (passed/total*100) if total > 0 else 0,
+                                (failed/total*100) if total > 0 else 0,
+                                (other/total*100) if total > 0 else 0
+                            ]
+                        }
+                        df_pie = pd.DataFrame(pie_data)
+                        
+                        fig_pie = px.pie(
+                            df_pie,
+                            values='Percentage',
+                            names='Category',
+                            title='Test Case Distribution (%)',
+                            color='Category',
+                            color_discrete_map={
+                                'Passed': '#2E7D32',
+                                'Failed': '#C62828',
+                                'Other': '#FFA726'
+                            }
                         )
-                    
-                    with stats_col4:
-                        avg_execution_time = statistics.get("avg_execution_time", 0)
-                        st.metric(
-                            "Avg. Execution Time",
-                            f"{avg_execution_time:.1f}s"
+                        
+                        fig_pie.update_layout(
+                            title_x=0.5,
+                            title_font_size=16,
+                            margin=dict(t=40, b=20, l=20, r=20)
                         )
-                    
-                    # Add Failure Trend Heatmap with error handling
+                        
+                        st.plotly_chart(fig_pie, use_container_width=True)
+
+                    # Add modernized Failure Trend Heatmap
                     st.subheader("🔥 Test Case Failure Trend (Last 10 Days)")
-                    
+
                     failure_trend = test_data.get("failure_trend", {})
                     if failure_trend:
-                        # Create heatmap data
                         trend_data = []
                         for date, data in failure_trend.items():
                             trend_data.append({
@@ -625,54 +670,96 @@ elif ops_agents_enabled and selected_ops == "🔍 Failure Analysis":
                                 "Failure Rate": data.get("failure_rate", 0)
                             })
                         
-                        if trend_data:  # Only create visualization if we have data
+                        if trend_data:
                             df_trend = pd.DataFrame(trend_data)
                             df_trend["Date"] = pd.to_datetime(df_trend["Date"])
                             df_trend = df_trend.sort_values("Date")
                             
-                            # Create heatmap using plotly
-                            fig = px.imshow(
-                                df_trend[["Failure Rate"]].T,
+                            # Create modern heatmap
+                            fig_heatmap = go.Figure()
+                            
+                            fig_heatmap.add_trace(go.Heatmap(
                                 x=df_trend["Date"],
-                                color_continuous_scale="RdYlGn_r",
-                                labels=dict(x="Date", y="Metric", color="Failure Rate %"),
-                                aspect="auto"
+                                y=["Failure Rate"],
+                                z=[df_trend["Failure Rate"]],
+                                colorscale=[
+                                    [0, '#1B5E20'],      # Dark green for low values
+                                    [0.4, '#81C784'],    # Light green
+                                    [0.6, '#FFCC80'],    # Light orange
+                                    [0.8, '#FF7043'],    # Orange
+                                    [1, '#B71C1C']       # Dark red for high values
+                                ],
+                                hoverongaps=False,
+                                hovertemplate="Date: %{x}<br>Failure Rate: %{z:.1f}%<extra></extra>",
+                                showscale=True
+                            ))
+                            
+                            fig_heatmap.update_layout(
+                                title=dict(
+                                    text="Failure Rate Trend",
+                                    x=0.5,
+                                    font=dict(size=16)
+                                ),
+                                height=180,
+                                plot_bgcolor='rgba(0,0,0,0)',
+                                paper_bgcolor='rgba(0,0,0,0)',
+                                margin=dict(l=20, r=20, t=40, b=20),
+                                xaxis=dict(
+                                    showgrid=False,
+                                    zeroline=False
+                                ),
+                                yaxis=dict(
+                                    showgrid=False,
+                                    zeroline=False,
+                                    showticklabels=False
+                                )
                             )
                             
-                            fig.update_layout(
-                                height=200,
-                                margin=dict(l=20, r=20, t=20, b=20)
-                            )
+                            st.plotly_chart(fig_heatmap, use_container_width=True)
                             
-                            st.plotly_chart(fig, use_container_width=True)
-                            
-                            # Add heatmap explanation
-                            st.info("""
-                                📖 **How to Read the Heatmap:**
-                                - **Color Intensity**: Darker red indicates higher failure rates, while darker green shows lower failure rates
-                                - **Daily Progression**: Left to right shows the trend over the last 10 days
-                                - **Quick Insights**: Spot patterns and identify days with unusual failure rates
-                            """)
-                            
-                            # Add Daily Trend Chart
+                            # Add improved daily trend chart
                             st.subheader("📈 Daily Test Case Failure Trends")
                             
-                            # Create line chart
-                            fig_line = px.line(
-                                df_trend,
-                                x="Date",
-                                y=["Total Tests", "Failed Tests"],
-                                title="Test Execution Trend",
-                                labels={"value": "Count", "variable": "Metric"},
-                                color_discrete_sequence=["#2E7D32", "#C62828"]
-                            )
+                            fig_line = go.Figure()
+                            
+                            # Add Total Tests line
+                            fig_line.add_trace(go.Scatter(
+                                x=df_trend["Date"],
+                                y=df_trend["Total Tests"],
+                                name="Total Tests",
+                                line=dict(color="#2E7D32", width=3),
+                                mode='lines+markers'
+                            ))
+                            
+                            # Add Failed Tests line
+                            fig_line.add_trace(go.Scatter(
+                                x=df_trend["Date"],
+                                y=df_trend["Failed Tests"],
+                                name="Failed Tests",
+                                line=dict(color="#C62828", width=3),
+                                mode='lines+markers'
+                            ))
                             
                             fig_line.update_layout(
+                                title="Test Execution Trend",
                                 xaxis_title="Date",
                                 yaxis_title="Number of Tests",
-                                legend_title="Metrics",
-                                hovermode='x unified'
+                                hovermode='x unified',
+                                plot_bgcolor='rgba(0,0,0,0)',
+                                paper_bgcolor='rgba(0,0,0,0)',
+                                showlegend=True,
+                                legend=dict(
+                                    orientation="h",
+                                    yanchor="bottom",
+                                    y=1.02,
+                                    xanchor="right",
+                                    x=1
+                                ),
+                                margin=dict(l=20, r=20, t=60, b=20)
                             )
+                            
+                            fig_line.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+                            fig_line.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
                             
                             st.plotly_chart(fig_line, use_container_width=True)
                         else:
