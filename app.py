@@ -11,7 +11,8 @@ from utils import (
     get_rally_projects,
     get_rally_user_stories,
     get_user_story_test_data,
-    get_project_rca_data
+    get_project_rca_data,
+    get_vbf_test_execution_summary
 )
 import openai
 import pandas as pd
@@ -202,7 +203,6 @@ if st.sidebar.checkbox("Show Configuration"):
             if check_rally_config():
                 success, message = test_rally_connection(config["rally_endpoint"], config["rally_api_key"])
                 if success:
-                    st.sidebar.markdown(f'<div class="success-message">✅ {message}</div>', unsafe_allow_html=True)
                     workspaces = get_rally_workspaces()
                     if workspaces:
                         st.session_state['workspaces'] = workspaces
@@ -1019,133 +1019,92 @@ elif ops_agents_enabled and selected_ops == "🎯 Root Cause Analysis":
     selected_workspace, selected_project = show_workspace_project_selector()
     
     if selected_workspace and selected_project:
-        rca_data = get_project_rca_data(selected_workspace, selected_project)
+        # Add tabs for different views
+        tab1, tab2 = st.tabs(["📊 RCA Overview", "🧪 VBF Test Execution"])
         
-        if rca_data and rca_data["defects"]:
-            # Summary metrics
-            total_defects = len(rca_data["defects"])
-            st.subheader("Root Cause Analysis Overview")
+        with tab1:
+            # Existing RCA code...
+            rca_data = get_project_rca_data(selected_workspace, selected_project)
+            # ... rest of existing RCA code
+        
+        with tab2:
+            st.subheader("VBF Test Execution Summary")
             
-            # Display summary metrics with custom container
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.markdown('<div class="metric-container">', unsafe_allow_html=True)
-                st.metric("Total Defects", total_defects)
-                st.markdown('</div>', unsafe_allow_html=True)
-            with col2:
-                st.markdown('<div class="metric-container">', unsafe_allow_html=True)
-                # Add null checks and default values
-                if rca_data["rca_summary"]:
-                    top_rca = max(rca_data["rca_summary"].items(), key=lambda x: x[1])
-                    display_rca = (top_rca[0][:20] + '...') if len(str(top_rca[0])) > 20 else top_rca[0]
-                    percentage = f"{(top_rca[1]/total_defects*100):.1f}%"
+            # Fetch VBF test execution data
+            vbf_data = get_vbf_test_execution_summary(selected_workspace, selected_project)
+            
+            if vbf_data:
+                # Create main summary table
+                summary_data = []
+                for area, stats in vbf_data["areas"].items():
+                    total = stats["passed"] + stats["failed"]
+                    pass_pct = (stats["passed"] / total * 100) if total > 0 else 0
+                    fail_pct = (stats["failed"] / total * 100) if total > 0 else 0
                     
-                    st.metric(
-                        "Most Common Root Cause", 
-                        display_rca,
-                        percentage
-                    )
-                    # If truncated, show full name in tooltip
-                    if len(str(top_rca[0])) > 20:
-                        st.caption(f"Full name: {top_rca[0]}")
-                else:
-                    st.metric("Most Common Root Cause", "No data", "0%")
-                st.markdown('</div>', unsafe_allow_html=True)
-            with col3:
-                st.markdown('<div class="metric-container">', unsafe_allow_html=True)
-                if rca_data["monthly_trend"]:
-                    recent_month = max(rca_data["monthly_trend"].keys())
-                    recent_count = sum(rca_data["monthly_trend"][recent_month].values())
-                    st.metric(
-                        "Recent Month Defects",
-                        recent_count,
-                        f"in {recent_month}"
-                    )
-                else:
-                    st.metric("Recent Month Defects", 0, "No data")
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Root Cause Distribution
-            st.subheader("Root Cause Distribution")
-            
-            # Create pie chart for RCA distribution
-            fig_pie = px.pie(
-                values=list(rca_data["rca_summary"].values()),
-                names=list(rca_data["rca_summary"].keys()),
-                title="Root Cause Distribution",
-                color_discrete_sequence=px.colors.qualitative.Set3
-            )
-            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-            st.plotly_chart(fig_pie, use_container_width=True)
-            
-            # Monthly Trend
-            st.subheader("Root Cause Trend Analysis")
-            
-            # Create monthly trend data
-            months = sorted(rca_data["monthly_trend"].keys())
-            root_causes = sorted(set(rca_data["rca_summary"].keys()))
-            
-            trend_data = []
-            for month in months:
-                for rc in root_causes:
-                    trend_data.append({
-                        'Month': month,
-                        'Root Cause': rc,
-                        'Count': rca_data["monthly_trend"][month].get(rc, 0)
+                    summary_data.append({
+                        "Name": area,
+                        "Passed": stats["passed"],
+                        "Failed": stats["failed"],
+                        "Pass %": f"{pass_pct:.2f}%",
+                        "Fail %": f"{fail_pct:.2f}%"
                     })
-            
-            df_trend = pd.DataFrame(trend_data)
-            
-            # Create stacked bar chart for monthly trend
-            fig_trend = px.bar(
-                df_trend,
-                x='Month',
-                y='Count',
-                color='Root Cause',
-                title='Monthly Root Cause Trend',
-                barmode='stack'
-            )
-            st.plotly_chart(fig_trend, use_container_width=True)
-            
-            # Severity and Priority Analysis
-            st.subheader("Defect Classification Analysis")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Severity distribution
-                fig_severity = px.pie(
-                    values=list(rca_data["severity_distribution"].values()),
-                    names=list(rca_data["severity_distribution"].keys()),
-                    title="Severity Distribution",
-                    color_discrete_sequence=px.colors.sequential.RdBu
+                
+                df_summary = pd.DataFrame(summary_data)
+                
+                # Add clickable links to area names
+                def make_clickable(val):
+                    return f'<a href="#" target="_self">{val}</a>'
+                
+                # Style the summary table
+                styled_df = df_summary.style.format({
+                    "Pass %": lambda x: f"{float(x.strip('%')):.2f}%",
+                    "Fail %": lambda x: f"{float(x.strip('%')):.2f}%"
+                }).applymap(
+                    lambda x: 'background-color: #e6ffe6' if isinstance(x, str) and '%' in x and float(x.strip('%')) >= 95 
+                    else 'background-color: #ffe6e6' if isinstance(x, str) and '%' in x and float(x.strip('%')) < 95
+                    else '', subset=['Pass %', 'Fail %']
+                ).format(
+                    {"Name": make_clickable}
                 )
-                st.plotly_chart(fig_severity, use_container_width=True)
-            
-            with col2:
-                # Priority distribution
-                fig_priority = px.pie(
-                    values=list(rca_data["priority_distribution"].values()),
-                    names=list(rca_data["priority_distribution"].keys()),
-                    title="Priority Distribution",
-                    color_discrete_sequence=px.colors.sequential.Viridis
-                )
-                st.plotly_chart(fig_priority, use_container_width=True)
-            
-            # Detailed RCA Table
-            st.subheader("Detailed Root Cause Analysis")
-            df_defects = pd.DataFrame(rca_data["defects"])
-            st.dataframe(
-                df_defects.style.apply(lambda x: [
-                    'background-color: #ffebee' if v == 'High' 
-                    else 'background-color: #fff3e0' if v == 'Medium'
-                    else 'background-color: #f1f8e9' if v == 'Low'
-                    else '' for v in x
-                ], subset=['severity', 'priority']),
-                use_container_width=True
-            )
-            
-        else:
-            st.info("No defect data available for Root Cause Analysis")
+                
+                st.write(styled_df.to_html(escape=False), unsafe_allow_html=True)
+                
+                # Add click handler for area names
+                selected_area = st.selectbox("Select Area for Tag Details", list(vbf_data["areas"].keys()))
+                
+                if selected_area and selected_area in vbf_data["area_tags"]:
+                    st.subheader(f"Tag Details for {selected_area}")
+                    
+                    # Create tag details table
+                    tag_data = []
+                    for tag, stats in vbf_data["area_tags"][selected_area].items():
+                        total = stats["passed"] + stats["failed"]
+                        pass_pct = (stats["passed"] / total * 100) if total > 0 else 0
+                        fail_pct = (stats["failed"] / total * 100) if total > 0 else 0
+                        
+                        tag_data.append({
+                            "Tags": tag,
+                            "Pass": stats["passed"],
+                            "Fail": stats["failed"],
+                            "Pass %": f"{pass_pct:.2f}%",
+                            "Fail %": f"{fail_pct:.2f}%"
+                        })
+                    
+                    df_tags = pd.DataFrame(tag_data)
+                    
+                    # Style the tags table
+                    styled_tags = df_tags.style.format({
+                        "Pass %": lambda x: f"{float(x.strip('%')):.2f}%",
+                        "Fail %": lambda x: f"{float(x.strip('%')):.2f}%"
+                    }).applymap(
+                        lambda x: 'background-color: #e6ffe6' if isinstance(x, str) and '%' in x and float(x.strip('%')) >= 95 
+                        else 'background-color: #ffe6e6' if isinstance(x, str) and '%' in x and float(x.strip('%')) < 95
+                        else ''
+                    )
+                    
+                    st.table(styled_tags)
+            else:
+                st.error("Unable to fetch VBF test execution data")
 
 else:
     # Show welcome message when no agent is enabled

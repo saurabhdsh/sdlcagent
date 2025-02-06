@@ -639,3 +639,92 @@ def get_project_rca_data(workspace_id: str, project_id: str) -> Dict[str, Any]:
     except Exception as e:
         logging.error(f"Error fetching RCA data: {str(e)}")
         return None
+
+def get_vbf_test_execution_summary(workspace_id: str, project_id: str) -> Dict[str, Any]:
+    """Fetch VBF Test Execution Summary data from Rally"""
+    try:
+        base_endpoint = config['rally_endpoint'].rstrip('/')
+        if not base_endpoint.endswith('/slm/webservice/v2.0'):
+            base_endpoint = f"{base_endpoint}/slm/webservice/v2.0"
+        
+        headers = {
+            "zsessionid": config['rally_api_key'],
+            "Content-Type": "application/json"
+        }
+        
+        # Fetch test cases with their tags and results
+        params = {
+            "workspace": f"/workspace/{workspace_id}",
+            "project": f"/project/{project_id}",
+            "fetch": "FormattedID,Name,LastVerdict,Tags,WorkProduct,Method",
+            "pagesize": 2000,
+            "query": "(Method = Automated)"
+        }
+        
+        response = requests.get(
+            f"{base_endpoint}/testcase",
+            headers=headers,
+            params=params,
+            verify=False
+        )
+        
+        if response.status_code == 200:
+            test_cases = response.json().get('QueryResult', {}).get('Results', [])
+            
+            # Initialize summary data structure
+            summary_data = {
+                "areas": {
+                    "Global Nav and Search": {"passed": 0, "failed": 0},
+                    "SBD": {"passed": 0, "failed": 0},
+                    "Prior Auth": {"passed": 0, "failed": 0},
+                    "CEX": {"passed": 0, "failed": 0},
+                    "UCard Hub": {"passed": 0, "failed": 0},
+                    "Document Center": {"passed": 0, "failed": 0},
+                    "IFP and C&S claims": {"passed": 0, "failed": 0},
+                    "PSX": {"passed": 0, "failed": 0}
+                },
+                "area_tags": {
+                    "Global Nav and Search": {
+                        "VBF": {"passed": 0, "failed": 0},
+                        "IFP": {"passed": 0, "failed": 0},
+                        "C&S": {"passed": 0, "failed": 0},
+                        "M&R": {"passed": 0, "failed": 0},
+                        "E&I": {"passed": 0, "failed": 0}
+                    }
+                    # Other areas will be populated dynamically
+                }
+            }
+            
+            # Process test cases
+            for test_case in test_cases:
+                work_product = test_case.get('WorkProduct', {})
+                area_name = work_product.get('Name', '').split(':')[0].strip()
+                verdict = test_case.get('LastVerdict', 'No Run')
+                tags = [tag.get('Name') for tag in test_case.get('Tags', [])]
+                
+                # Update area statistics
+                if area_name in summary_data["areas"]:
+                    if verdict == 'Pass':
+                        summary_data["areas"][area_name]["passed"] += 1
+                    elif verdict == 'Fail':
+                        summary_data["areas"][area_name]["failed"] += 1
+                    
+                    # Initialize area tags if not exists
+                    if area_name not in summary_data["area_tags"]:
+                        summary_data["area_tags"][area_name] = {}
+                    
+                    # Update tag statistics
+                    for tag in tags:
+                        if tag not in summary_data["area_tags"][area_name]:
+                            summary_data["area_tags"][area_name][tag] = {"passed": 0, "failed": 0}
+                        
+                        if verdict == 'Pass':
+                            summary_data["area_tags"][area_name][tag]["passed"] += 1
+                        elif verdict == 'Fail':
+                            summary_data["area_tags"][area_name][tag]["failed"] += 1
+            
+            return summary_data
+            
+    except Exception as e:
+        logging.error(f"Error fetching VBF test execution summary: {str(e)}")
+        return None
