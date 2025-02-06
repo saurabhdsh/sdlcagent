@@ -6,10 +6,10 @@ import logging
 import urllib3
 import warnings
 from datetime import datetime, timedelta
-
+ 
 # Disable SSL warnings globally
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
+ 
 # Configuration dictionary
 config: Dict[str, str] = {
     "rally_endpoint": "",
@@ -18,7 +18,7 @@ config: Dict[str, str] = {
     "selected_workspace": "",
     "selected_project": ""
 }
-
+ 
 def call_openai_api(messages, model="gpt-3.5-turbo"):
     """
     Call the OpenAI API with the given messages.
@@ -39,7 +39,7 @@ def call_openai_api(messages, model="gpt-3.5-turbo"):
     except Exception as e:
         print(f"Error calling OpenAI API: {str(e)}")
         return None
-
+ 
 def check_rally_config() -> bool:
     """
     Check if Rally configuration is properly set up.
@@ -48,7 +48,7 @@ def check_rally_config() -> bool:
         bool: True if both rally_endpoint and rally_api_key are set, False otherwise
     """
     return bool(config.get("rally_endpoint")) and bool(config.get("rally_api_key"))
-
+ 
 def upload_user_story_to_rally(user_story: str, project_id: str) -> Optional[str]:
     """
     Upload a user story to Rally.
@@ -93,7 +93,7 @@ def upload_user_story_to_rally(user_story: str, project_id: str) -> Optional[str
     except Exception as e:
         print(f"Error uploading to Rally: {str(e)}")
         return None
-
+ 
 def test_rally_connection(endpoint: str, api_key: str) -> Tuple[bool, str]:
     """Test connection to Rally and validate credentials"""
     try:
@@ -104,21 +104,21 @@ def test_rally_connection(endpoint: str, api_key: str) -> Tuple[bool, str]:
             "Content-Type": "application/json",
             "Accept": "application/json"
         })
-        
+       
         base_endpoint = endpoint.rstrip('/')
         if not base_endpoint.endswith('/slm/webservice/v2.0'):
             base_endpoint = f"{base_endpoint}/slm/webservice/v2.0"
-        
+       
         response = session.get(f"{base_endpoint}/subscription")
-        
+       
         if response.status_code == 200:
             return True, "Successfully connected to Rally"
         else:
             return False, f"Failed to connect. Status code: {response.status_code}"
-            
+           
     except Exception as e:
         return False, f"Connection error: {str(e)}"
-
+ 
 def get_rally_workspaces() -> List[Dict[str, str]]:
     """
     Fetch available workspaces from Rally
@@ -174,7 +174,7 @@ def get_rally_workspaces() -> List[Dict[str, str]]:
     except Exception as e:
         print(f"Error fetching workspaces: {str(e)}")
         return []
-
+ 
 def get_rally_projects(workspace_id: str) -> List[Dict[str, str]]:
     """
     Fetch available projects for a workspace from Rally
@@ -268,20 +268,20 @@ def get_rally_projects(workspace_id: str) -> List[Dict[str, str]]:
         print(f"Error fetching projects: {str(e)}")
         print(f"Full error: {str(e.__class__.__name__)}: {str(e)}")
         return []
-
+ 
 def get_rally_user_stories(workspace_id: str, project_id: str) -> List[Dict[str, Any]]:
     """Fetch user stories from Rally"""
     try:
         base_endpoint = config['rally_endpoint'].rstrip('/')
         if not base_endpoint.endswith('/slm/webservice/v2.0'):
             base_endpoint = f"{base_endpoint}/slm/webservice/v2.0"
-        
+       
         headers = {
             "zsessionid": config['rally_api_key'],
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
-        
+       
         params = {
             "workspace": f"/workspace/{workspace_id}",
             "project": f"/project/{project_id}",
@@ -289,20 +289,20 @@ def get_rally_user_stories(workspace_id: str, project_id: str) -> List[Dict[str,
             "pagesize": 100,
             "order": "CreationDate DESC"
         }
-        
+       
         print(f"Fetching user stories from: {base_endpoint}/hierarchicalrequirement")
         print(f"Query parameters: {params}")
-        
+       
         response = requests.get(
             f"{base_endpoint}/hierarchicalrequirement",
             headers=headers,
             params=params,
             verify=False
         )
-        
+       
         print(f"User Stories API Response Status: {response.status_code}")
         print(f"Full URL called: {response.url}")
-        
+       
         if response.status_code == 200:
             response_data = response.json()
             stories = response_data.get('QueryResult', {}).get('Results', [])
@@ -311,7 +311,7 @@ def get_rally_user_stories(workspace_id: str, project_id: str) -> List[Dict[str,
                 story_id = story.get('FormattedID', '')
                 story_name = story.get('Name', 'Untitled Story')
                 story_desc = story.get('Description', '')
-                
+               
                 # Create a formatted story entry
                 story_list.append({
                     "id": story_id,  # Changed to use FormattedID instead of ObjectID
@@ -320,14 +320,14 @@ def get_rally_user_stories(workspace_id: str, project_id: str) -> List[Dict[str,
                     "description": story_desc,
                     "display_name": f"{story_id}: {story_name}"
                 })
-            
+           
             print(f"Found {len(story_list)} user stories")
             return story_list
-            
+           
     except Exception as e:
         print(f"Error fetching user stories: {str(e)}")
         return []
-
+ 
 def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) -> Dict[str, Any]:
     try:
         session = requests.Session()
@@ -337,11 +337,11 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
             "Content-Type": "application/json",
             "Accept": "application/json"
         })
-        
+       
         base_endpoint = config['rally_endpoint'].rstrip('/')
         if not base_endpoint.endswith('/slm/webservice/v2.0'):
             base_endpoint = f"{base_endpoint}/slm/webservice/v2.0"
-        
+       
         # Initialize default test data structure
         test_data = {
             "total_tests": 0,
@@ -355,12 +355,12 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
             "failure_trend": {},
             "daily_trend": {}
         }
-        
+       
         # Fetch all test cases with pagination
         all_test_cases = []
         start = 1
         page_size = 200
-        
+       
         while True:
             test_case_params = {
                 "workspace": f"/workspace/{workspace_id}",
@@ -373,48 +373,48 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
                 "start": start,
                 "order": "FormattedID ASC"
             }
-            
+           
             print(f"Fetching test cases for story {story_id}")
             print(f"Query parameters: {test_case_params}")
-            
+           
             test_case_response = session.get(
                 f"{base_endpoint}/testcase",
                 params=test_case_params
             )
-            
+           
             if test_case_response.status_code == 200:
                 result_data = test_case_response.json().get('QueryResult', {})
                 page_test_cases = result_data.get('Results', [])
                 total_results = result_data.get('TotalResultCount', 0)
-                
+               
                 print(f"Found {len(page_test_cases)} test cases on this page")
                 print(f"Total results available: {total_results}")
-                
+               
                 if not page_test_cases:
                     break
-                    
+                   
                 all_test_cases.extend(page_test_cases)
-                
+               
                 if len(all_test_cases) >= total_results:
                     break
-                    
+                   
                 start += page_size
             else:
                 print(f"Error fetching test cases: {test_case_response.status_code}")
                 print(f"Response: {test_case_response.text}")
                 break
-        
+       
         # Add debug logging
         print(f"Fetching test cases for story {story_id}")
         print(f"Total test cases found: {len(all_test_cases)}")
-        
+       
         # Add better error handling for test case fetching
         if not all_test_cases:
             print(f"No test cases found for story {story_id}")
             return test_data
-
+ 
         test_data["total_tests"] = len(all_test_cases)
-        
+       
         # Process test cases with better error handling
         for test_case in all_test_cases:
             try:
@@ -422,21 +422,21 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
                 if not isinstance(test_case, dict):
                     print(f"Invalid test case data format: {test_case}")
                     continue
-
+ 
                 test_case_id = test_case.get('FormattedID')
                 if not test_case_id:
                     print("Missing test case ID, skipping...")
                     continue
-
+ 
                 print(f"Processing test case: {test_case_id}")
-                
+               
                 # Get LastVerdict directly from LastResult if available
                 last_result = test_case.get('LastResult', {})
                 if isinstance(last_result, dict):
                     verdict = last_result.get('Verdict', test_case.get('LastVerdict', 'No Run'))
                 else:
                     verdict = test_case.get('LastVerdict', 'No Run')
-
+ 
                 # Safely get all test case attributes with defaults
                 test_case_data = {
                     "test_case_id": test_case_id,
@@ -449,7 +449,7 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
                     "Owner": (test_case.get('Owner', {}) or {}).get('_refObjectName', 'Unassigned'),
                     "Results": test_case.get('Results', [])
                 }
-
+ 
                 # Update counters based on verdict
                 if verdict == 'Pass':
                     test_data["passed"] += 1
@@ -458,21 +458,21 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
                     print(f"Found failed test: {test_case_id}")  # Debug logging
                 else:
                     test_data["other"] += 1
-                
+               
                 # Add test case to the list
                 test_data["test_cases"].append(test_case_data)
-                
+               
             except Exception as e:
                 print(f"Error processing test case {test_case.get('FormattedID', 'Unknown')}: {str(e)}")
                 print(f"Test case data: {test_case}")
                 continue
-
+ 
         # Calculate pass percentage safely
         total_tests = len(test_data["test_cases"])
         test_data["total_tests"] = total_tests
         if total_tests > 0:
             test_data["pass_percentage"] = (test_data["passed"] / total_tests) * 100
-
+ 
         # Initialize and calculate failure trends with better error handling
         today = datetime.now()
         for i in range(10):
@@ -483,7 +483,7 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
                 "failure_rate": 0,
                 "failure_details": []
             }
-
+ 
         # Process test results for trend with better error handling
         for test_case in test_data["test_cases"]:
             try:
@@ -500,7 +500,7 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
                     except ValueError:
                         print(f"Invalid date format: {date_time}")
                         continue
-
+ 
                     if date in test_data["failure_trend"]:
                         test_data["failure_trend"][date]["total"] += 1
                         if test_case["verdict"] == 'Fail':
@@ -513,16 +513,16 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
                                 "execution_time": test_case.get("Duration", "N/A"),
                                 "owner": test_case.get("Owner", "Unassigned")
                             }
-                            
+                           
                             # Add to failure details if not already present
                             if failure_detail not in test_data["failure_trend"][date]["failure_details"]:
                                 test_data["failure_trend"][date]["failure_details"].append(failure_detail)
                                 print(f"Added failure detail for test {test_case['test_case_id']} on {date}")  # Debug logging
-
+ 
             except Exception as e:
                 print(f"Error processing trend data for test case {test_case.get('test_case_id', 'Unknown')}: {str(e)}")
                 continue
-
+ 
         # Calculate failure rates safely
         for date in test_data["failure_trend"]:
             try:
@@ -533,16 +533,16 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
             except Exception as e:
                 print(f"Error calculating failure rate for date {date}: {str(e)}")
                 continue
-
+ 
         print(f"Final test data summary:")
         print(f"Total Tests: {test_data['total_tests']}")
         print(f"Failed Tests: {test_data['failed']}")
         print(f"Passed Tests: {test_data['passed']}")
         print(f"Other Tests: {test_data['other']}")
         print(f"Failure Details Count: {sum(len(data['failure_details']) for data in test_data['failure_trend'].values())}")
-
+ 
         return test_data
-
+ 
     except Exception as e:
         logging.error(f"Error fetching test data: {str(e)}")
         return {
@@ -557,19 +557,19 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
             "failure_trend": {},
             "daily_trend": {}
         }
-
+ 
 def get_project_rca_data(workspace_id: str, project_id: str) -> Dict[str, Any]:
     """Fetch defects and their root causes for RCA analysis"""
     try:
         base_endpoint = config['rally_endpoint'].rstrip('/')
         if not base_endpoint.endswith('/slm/webservice/v2.0'):
             base_endpoint = f"{base_endpoint}/slm/webservice/v2.0"
-        
+       
         headers = {
             "zsessionid": config['rally_api_key'],
             "Content-Type": "application/json"
         }
-        
+       
         # Fetch all defects for the project with RCA information
         defect_query_url = f"{base_endpoint}/defect"
         defect_params = {
@@ -579,17 +579,17 @@ def get_project_rca_data(workspace_id: str, project_id: str) -> Dict[str, Any]:
             "pagesize": 200,
             "order": "CreationDate DESC"
         }
-        
+       
         response = requests.get(
             defect_query_url,
             headers=headers,
             params=defect_params,
             verify=False
         )
-        
+       
         if response.status_code == 200:
             defects = response.json().get('QueryResult', {}).get('Results', [])
-            
+           
             rca_data = {
                 "defects": [],
                 "rca_summary": {},
@@ -598,14 +598,14 @@ def get_project_rca_data(workspace_id: str, project_id: str) -> Dict[str, Any]:
                 "priority_distribution": {},
                 "state_distribution": {}
             }
-            
+           
             for defect in defects:
                 creation_date = defect.get('CreationDate', '').split('T')[0]
                 root_cause = defect.get('c_RCARootCauseUS', 'Unspecified')
                 severity = defect.get('Severity', 'None')
                 priority = defect.get('Priority', 'None')
                 state = defect.get('State', 'None')
-                
+               
                 # Add to defects list
                 rca_data["defects"].append({
                     "name": defect.get('Name', 'Unnamed Defect'),
@@ -615,17 +615,17 @@ def get_project_rca_data(workspace_id: str, project_id: str) -> Dict[str, Any]:
                     "state": state,
                     "creation_date": creation_date
                 })
-                
+               
                 # Update RCA summary
                 rca_data["rca_summary"][root_cause] = rca_data["rca_summary"].get(root_cause, 0) + 1
-                
+               
                 # Update monthly trend
                 month = creation_date[:7]  # Get YYYY-MM
                 if month not in rca_data["monthly_trend"]:
                     rca_data["monthly_trend"][month] = {}
                 rca_data["monthly_trend"][month][root_cause] = \
                     rca_data["monthly_trend"][month].get(root_cause, 0) + 1
-                
+               
                 # Update distributions
                 rca_data["severity_distribution"][severity] = \
                     rca_data["severity_distribution"].get(severity, 0) + 1
@@ -633,98 +633,9 @@ def get_project_rca_data(workspace_id: str, project_id: str) -> Dict[str, Any]:
                     rca_data["priority_distribution"].get(priority, 0) + 1
                 rca_data["state_distribution"][state] = \
                     rca_data["state_distribution"].get(state, 0) + 1
-            
+           
             return rca_data
-            
+           
     except Exception as e:
         logging.error(f"Error fetching RCA data: {str(e)}")
-        return None
-
-def get_vbf_test_execution_summary(workspace_id: str, project_id: str) -> Dict[str, Any]:
-    """Fetch VBF Test Execution Summary data from Rally"""
-    try:
-        base_endpoint = config['rally_endpoint'].rstrip('/')
-        if not base_endpoint.endswith('/slm/webservice/v2.0'):
-            base_endpoint = f"{base_endpoint}/slm/webservice/v2.0"
-        
-        headers = {
-            "zsessionid": config['rally_api_key'],
-            "Content-Type": "application/json"
-        }
-        
-        # Fetch test cases with their tags and results
-        params = {
-            "workspace": f"/workspace/{workspace_id}",
-            "project": f"/project/{project_id}",
-            "fetch": "FormattedID,Name,LastVerdict,Tags,WorkProduct,Method",
-            "pagesize": 2000,
-            "query": "(Method = Automated)"
-        }
-        
-        response = requests.get(
-            f"{base_endpoint}/testcase",
-            headers=headers,
-            params=params,
-            verify=False
-        )
-        
-        if response.status_code == 200:
-            test_cases = response.json().get('QueryResult', {}).get('Results', [])
-            
-            # Initialize summary data structure
-            summary_data = {
-                "areas": {
-                    "Global Nav and Search": {"passed": 0, "failed": 0},
-                    "SBD": {"passed": 0, "failed": 0},
-                    "Prior Auth": {"passed": 0, "failed": 0},
-                    "CEX": {"passed": 0, "failed": 0},
-                    "UCard Hub": {"passed": 0, "failed": 0},
-                    "Document Center": {"passed": 0, "failed": 0},
-                    "IFP and C&S claims": {"passed": 0, "failed": 0},
-                    "PSX": {"passed": 0, "failed": 0}
-                },
-                "area_tags": {
-                    "Global Nav and Search": {
-                        "VBF": {"passed": 0, "failed": 0},
-                        "IFP": {"passed": 0, "failed": 0},
-                        "C&S": {"passed": 0, "failed": 0},
-                        "M&R": {"passed": 0, "failed": 0},
-                        "E&I": {"passed": 0, "failed": 0}
-                    }
-                    # Other areas will be populated dynamically
-                }
-            }
-            
-            # Process test cases
-            for test_case in test_cases:
-                work_product = test_case.get('WorkProduct', {})
-                area_name = work_product.get('Name', '').split(':')[0].strip()
-                verdict = test_case.get('LastVerdict', 'No Run')
-                tags = [tag.get('Name') for tag in test_case.get('Tags', [])]
-                
-                # Update area statistics
-                if area_name in summary_data["areas"]:
-                    if verdict == 'Pass':
-                        summary_data["areas"][area_name]["passed"] += 1
-                    elif verdict == 'Fail':
-                        summary_data["areas"][area_name]["failed"] += 1
-                    
-                    # Initialize area tags if not exists
-                    if area_name not in summary_data["area_tags"]:
-                        summary_data["area_tags"][area_name] = {}
-                    
-                    # Update tag statistics
-                    for tag in tags:
-                        if tag not in summary_data["area_tags"][area_name]:
-                            summary_data["area_tags"][area_name][tag] = {"passed": 0, "failed": 0}
-                        
-                        if verdict == 'Pass':
-                            summary_data["area_tags"][area_name][tag]["passed"] += 1
-                        elif verdict == 'Fail':
-                            summary_data["area_tags"][area_name][tag]["failed"] += 1
-            
-            return summary_data
-            
-    except Exception as e:
-        logging.error(f"Error fetching VBF test execution summary: {str(e)}")
         return None
