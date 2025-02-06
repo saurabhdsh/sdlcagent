@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any, List, Tuple
 import logging
 import urllib3
 import warnings
+from datetime import datetime, timedelta
 
 # Disable SSL warnings globally
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -350,7 +351,10 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
             "other": 0,
             "test_cases": [],
             "defects": [],
-            "pass_percentage": 0
+            "pass_percentage": 0,
+            "statistics": {},
+            "failure_trend": {},
+            "daily_trend": {}
         }
         
         # Fetch all test cases with pagination
@@ -362,8 +366,8 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
             test_case_params = {
                 "workspace": f"/workspace/{workspace_id}",
                 "project": f"/project/{project_id}",
-                "query": f"(WorkProduct.FormattedID = \"{story_id}\")",  # Use story_id directly as FormattedID
-                "fetch": "FormattedID,Name,LastVerdict,LastRun,ObjectID",
+                "query": f"(WorkProduct.FormattedID = \"{story_id}\")",
+                "fetch": "FormattedID,Name,LastVerdict,LastRun,ObjectID,Type,Duration,Method,Priority,Owner,TestCaseStatus,LastBuild",
                 "pagesize": page_size,
                 "start": start,
                 "order": "FormattedID ASC"
@@ -485,6 +489,75 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
         print(f"Passed: {test_data['passed']}")
         print(f"Failed: {test_data['failed']}")
         print(f"Other: {test_data['other']}")
+        
+        # After processing all test cases, calculate statistics
+        test_data["statistics"] = {
+            "automation_coverage": (len([tc for tc in all_test_cases if tc.get('Method', '').lower() == 'automated']) / len(all_test_cases) * 100) if all_test_cases else 0,
+            "flaky_tests": len([tc for tc in test_data["test_cases"] if tc["verdict"] == 'Fail' and any(prev["verdict"] == 'Pass' for prev in test_data["test_cases"])]),
+            "never_run": len([tc for tc in test_data["test_cases"] if tc["verdict"] == 'No Run' or not tc.get('LastRun')]),
+            "avg_execution_time": sum([float(tc.get('Duration', 0) or 0) for tc in all_test_cases]) / len(all_test_cases) if all_test_cases else 0,
+            "priority_distribution": {
+                "High": len([tc for tc in all_test_cases if tc.get('Priority', '').lower() == 'high']),
+                "Medium": len([tc for tc in all_test_cases if tc.get('Priority', '').lower() == 'medium']),
+                "Low": len([tc for tc in all_test_cases if tc.get('Priority', '').lower() == 'low'])
+            },
+            "status_distribution": {
+                status: len([tc for tc in all_test_cases if tc.get('TestCaseStatus', '') == status])
+                for status in set(tc.get('TestCaseStatus', '') for tc in all_test_cases if tc.get('TestCaseStatus'))
+            },
+            "owner_distribution": {
+                owner: len([tc for tc in all_test_cases if tc.get('Owner', {}).get('_refObjectName', '') == owner])
+                for owner in set(tc.get('Owner', {}).get('_refObjectName', '') for tc in all_test_cases if tc.get('Owner'))
+            }
+        }
+        
+        # Calculate failure trends for last 10 days
+        today = datetime.now()
+        
+        # Initialize 10-day trend
+        for i in range(10):
+            date = (today - timedelta(days=i)).strftime('%Y-%m-%d')
+            test_data["failure_trend"][date] = {
+                "total": 0,
+                "failed": 0,
+                "failure_rate": 0,
+                "failure_details": []
+            }
+        
+        # Process test results for trend
+        for test_case in test_data["test_cases"]:
+            if test_case["date_time"] != 'N/A':
+                date = test_case["date_time"].split('T')[0]
+                if date in test_data["failure_trend"]:
+                    test_data["failure_trend"][date]["total"] += 1
+                    if test_case["verdict"] == 'Fail':
+                        test_data["failure_trend"][date]["failed"] += 1
+                    # Store additional failure details
+                    test_data["failure_trend"][date]["failure_details"].append({
+                        "test_case_id": test_case["test_case_id"],
+                        "test_case_name": test_case["test_case_name"],
+                        "build": test_case.get("LastBuild", "Unknown")
+                    })
+        
+        # Calculate failure rates
+        for date in test_data["failure_trend"]:
+            total = test_data["failure_trend"][date]["total"]
+            if total > 0:
+                test_data["failure_trend"][date]["failure_rate"] = (
+                    test_data["failure_trend"][date]["failed"] / total * 100
+                )
+        
+        # Calculate daily trends
+        test_data["daily_trend"] = {
+            date: {
+                "total": data["total"],
+                "failed": data["failed"],
+                "failure_rate": data["failure_rate"],
+                "failure_details": data.get("failure_details", []),
+                "success_rate": ((data["total"] - data["failed"]) / data["total"] * 100) if data["total"] > 0 else 0
+            }
+            for date, data in test_data["failure_trend"].items()
+        }
         
         return test_data
         
