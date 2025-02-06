@@ -576,14 +576,14 @@ elif ops_agents_enabled and selected_ops == "🔍 Failure Analysis":
                             use_container_width=True
                         )
 
-                    # Add Test Case Statistics section
-                    st.subheader("📊 Test Case Statistics")
+                    # Update the Test Case Statistics section with modern visualizations
 
-                    # Create two columns for charts
+                    # Create two columns for charts with better spacing
+                    st.markdown("<br>", unsafe_allow_html=True)
                     chart_col1, chart_col2 = st.columns(2)
 
                     with chart_col1:
-                        # Create Pass vs Fail Bar Chart
+                        # Create modern Pass vs Fail Bar Chart
                         status_data = {
                             'Status': ['Passed', 'Failed', 'Other'],
                             'Count': [
@@ -594,67 +594,255 @@ elif ops_agents_enabled and selected_ops == "🔍 Failure Analysis":
                         }
                         df_status = pd.DataFrame(status_data)
                         
-                        fig_bar = px.bar(
-                            df_status,
-                            x='Status',
-                            y='Count',
-                            title='Test Case Status Distribution',
-                            color='Status',
-                            color_discrete_map={
-                                'Passed': '#4CAF50',
-                                'Failed': '#FF6B6B',
-                                'Other': '#FFB74D'
-                            }
-                        )
+                        fig_bar = go.Figure()
+                        
+                        fig_bar.add_trace(go.Bar(
+                            x=df_status['Status'],
+                            y=df_status['Count'],
+                            marker_color=['#4CAF50', '#FF6B6B', '#FFB74D'],
+                            text=df_status['Count'],
+                            textposition='auto',
+                            hovertemplate="<b>%{x}</b><br>" +
+                                         "Count: %{y}<br>" +
+                                         "<extra></extra>",
+                            width=0.6
+                        ))
                         
                         fig_bar.update_layout(
+                            title={
+                                'text': "Test Case Status Distribution",
+                                'y':0.95,
+                                'x':0.5,
+                                'xanchor': 'center',
+                                'yanchor': 'top',
+                                'font': dict(size=16)
+                            },
                             showlegend=False,
                             plot_bgcolor='rgba(0,0,0,0)',
                             paper_bgcolor='rgba(0,0,0,0)',
-                            title_x=0.5,
-                            title_font_size=16,
-                            margin=dict(t=40, b=20, l=20, r=20)
+                            margin=dict(l=20, r=20, t=40, b=20),
+                            height=400,
+                            xaxis=dict(
+                                showgrid=False,
+                                showline=True,
+                                linecolor='rgb(204, 204, 204)',
+                                linewidth=2,
+                                ticks='outside',
+                                tickfont=dict(size=12)
+                            ),
+                            yaxis=dict(
+                                showgrid=True,
+                                gridcolor='rgb(204, 204, 204)',
+                                zeroline=False,
+                                showline=True,
+                                linecolor='rgb(204, 204, 204)',
+                                linewidth=2
+                            )
+                        )
+                        
+                        # Add gradient and shadow effects
+                        fig_bar.update_traces(
+                            marker_pattern_shape="x",
+                            marker_line_color='rgb(255, 255, 255)',
+                            marker_line_width=1.5,
+                            opacity=0.9
                         )
                         
                         st.plotly_chart(fig_bar, use_container_width=True)
 
                     with chart_col2:
-                        # Create Test Case Distribution Pie Chart
+                        # Create modern Pie Chart
                         total = test_data.get("total_tests", 0)
                         passed = test_data.get("passed", 0)
                         failed = test_data.get("failed", 0)
                         other = test_data.get("other", 0)
                         
-                        pie_data = {
-                            'Category': ['Passed', 'Failed', 'Other'],
-                            'Percentage': [
-                                (passed/total*100) if total > 0 else 0,
-                                (failed/total*100) if total > 0 else 0,
-                                (other/total*100) if total > 0 else 0
-                            ]
-                        }
-                        df_pie = pd.DataFrame(pie_data)
+                        fig_pie = go.Figure()
                         
-                        fig_pie = px.pie(
-                            df_pie,
-                            values='Percentage',
-                            names='Category',
-                            title='Test Case Distribution (%)',
-                            color='Category',
-                            color_discrete_map={
-                                'Passed': '#4CAF50',
-                                'Failed': '#FF6B6B',
-                                'Other': '#FFB74D'
-                            }
-                        )
+                        fig_pie.add_trace(go.Pie(
+                            labels=['Passed', 'Failed', 'Other'],
+                            values=[passed, failed, other],
+                            hole=0.6,
+                            marker=dict(
+                                colors=['#4CAF50', '#FF6B6B', '#FFB74D'],
+                                line=dict(color='#ffffff', width=2)
+                            ),
+                            textinfo='label+percent',
+                            hovertemplate="<b>%{label}</b><br>" +
+                                         "Count: %{value}<br>" +
+                                         "Percentage: %{percent}<br>" +
+                                         "<extra></extra>",
+                            textfont=dict(size=12)
+                        ))
                         
                         fig_pie.update_layout(
-                            title_x=0.5,
-                            title_font_size=16,
-                            margin=dict(t=40, b=20, l=20, r=20)
+                            title={
+                                'text': "Test Case Distribution",
+                                'y':0.95,
+                                'x':0.5,
+                                'xanchor': 'center',
+                                'yanchor': 'top',
+                                'font': dict(size=16)
+                            },
+                            showlegend=True,
+                            legend=dict(
+                                orientation="h",
+                                yanchor="bottom",
+                                y=-0.2,
+                                xanchor="center",
+                                x=0.5
+                            ),
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            margin=dict(l=20, r=20, t=40, b=60),
+                            height=400,
+                            annotations=[
+                                dict(
+                                    text=f'Total<br>{total}',
+                                    x=0.5,
+                                    y=0.5,
+                                    font_size=16,
+                                    font_color='#333333',
+                                    showarrow=False
+                                )
+                            ]
                         )
                         
                         st.plotly_chart(fig_pie, use_container_width=True)
+
+                    # Update the Heatmap with modern design
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if failure_trend:
+                        fig_heatmap = go.Figure()
+                        
+                        fig_heatmap.add_trace(go.Heatmap(
+                            x=df_trend["Date"],
+                            y=["Failure Rate"],
+                            z=[df_trend["Failure Rate"]],
+                            colorscale=[
+                                [0, '#E8F5E9'],      # Very light green
+                                [0.2, '#81C784'],    # Light green
+                                [0.4, '#4CAF50'],    # Medium green
+                                [0.6, '#FFF3E0'],    # Light orange
+                                [0.8, '#FFB74D'],    # Medium orange
+                                [1, '#FF6B6B']       # Soft red
+                            ],
+                            hoverongaps=False,
+                            hovertemplate=(
+                                "<b>Date</b>: %{x|%Y-%m-%d}<br>" +
+                                "<b>Failure Rate</b>: %{z:.1f}%<br>" +
+                                "<extra></extra>"
+                            ),
+                            showscale=True
+                        ))
+                        
+                        fig_heatmap.update_layout(
+                            title=dict(
+                                text="Failure Rate Trend",
+                                x=0.5,
+                                font=dict(size=16, color='#333333')
+                            ),
+                            height=180,
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            margin=dict(l=20, r=20, t=40, b=20),
+                            xaxis=dict(
+                                showgrid=False,
+                                zeroline=False,
+                                showline=True,
+                                linecolor='rgb(204, 204, 204)',
+                                linewidth=2
+                            ),
+                            yaxis=dict(
+                                showgrid=False,
+                                zeroline=False,
+                                showticklabels=False,
+                                showline=True,
+                                linecolor='rgb(204, 204, 204)',
+                                linewidth=2
+                            )
+                        )
+
+                        # Add trend line chart with modern design
+                        fig_line = go.Figure()
+                        
+                        # Add area fill for total tests
+                        fig_line.add_trace(go.Scatter(
+                            x=df_trend["Date"],
+                            y=df_trend["Total Tests"],
+                            name="Total Tests",
+                            fill='tozeroy',
+                            fillcolor='rgba(76, 175, 80, 0.1)',
+                            line=dict(color='#4CAF50', width=3),
+                            mode='lines+markers',
+                            marker=dict(
+                                size=8,
+                                symbol='circle',
+                                line=dict(color='#FFFFFF', width=2)
+                            )
+                        ))
+                        
+                        # Add area fill for failed tests
+                        fig_line.add_trace(go.Scatter(
+                            x=df_trend["Date"],
+                            y=df_trend["Failed Tests"],
+                            name="Failed Tests",
+                            fill='tozeroy',
+                            fillcolor='rgba(255, 107, 107, 0.1)',
+                            line=dict(color='#FF6B6B', width=3),
+                            mode='lines+markers',
+                            marker=dict(
+                                size=8,
+                                symbol='circle',
+                                line=dict(color='#FFFFFF', width=2)
+                            )
+                        ))
+                        
+                        fig_line.update_layout(
+                            title={
+                                'text': "Test Execution Trend",
+                                'y':0.95,
+                                'x':0.5,
+                                'xanchor': 'center',
+                                'yanchor': 'top',
+                                'font': dict(size=16)
+                            },
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            hovermode='x unified',
+                            showlegend=True,
+                            legend=dict(
+                                orientation="h",
+                                yanchor="bottom",
+                                y=1.02,
+                                xanchor="right",
+                                x=1,
+                                bgcolor='rgba(255, 255, 255, 0.8)',
+                                bordercolor='rgba(0, 0, 0, 0.1)',
+                                borderwidth=1
+                            ),
+                            margin=dict(l=20, r=20, t=60, b=20),
+                            xaxis=dict(
+                                showgrid=True,
+                                gridcolor='rgba(204, 204, 204, 0.3)',
+                                showline=True,
+                                linecolor='rgb(204, 204, 204)',
+                                linewidth=2,
+                                ticks='outside',
+                                tickfont=dict(size=10)
+                            ),
+                            yaxis=dict(
+                                showgrid=True,
+                                gridcolor='rgba(204, 204, 204, 0.3)',
+                                showline=True,
+                                linecolor='rgb(204, 204, 204)',
+                                linewidth=2,
+                                ticks='outside',
+                                tickfont=dict(size=10)
+                            )
+                        )
+
+                        st.plotly_chart(fig_line, use_container_width=True)
 
                     # Add modernized Failure Trend Heatmap
                     st.subheader("🔥 Test Case Failure Trend (Last 10 Days)")

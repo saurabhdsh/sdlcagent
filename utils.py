@@ -343,7 +343,7 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
         if not base_endpoint.endswith('/slm/webservice/v2.0'):
             base_endpoint = f"{base_endpoint}/slm/webservice/v2.0"
         
-        # Initialize test data structure
+        # Initialize test data structure with defaults
         test_data = {
             "total_tests": 0,
             "passed": 0,
@@ -413,53 +413,101 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
         
         # Process each test case and get its latest result
         for test_case in all_test_cases:
-            test_case_id = test_case.get('FormattedID')
-            print(f"Processing test case: {test_case_id}")
-            
-            test_case_name = test_case.get('Name', 'Unnamed Test')
-            verdict = test_case.get('LastVerdict', 'No Run')
-            
-            # Get the latest test case result
-            tcr_params = {
-                "workspace": f"/workspace/{workspace_id}",
-                "query": f"(TestCase.FormattedID = {test_case_id})",
-                "fetch": "ObjectID,Date,Verdict",
-                "pagesize": 1,
-                "order": "Date DESC"
-            }
-            
-            tcr_response = session.get(
-                f"{base_endpoint}/testcaseresult",
-                params=tcr_params
-            )
-            
-            tcr_id = 'N/A'
-            date_time = 'N/A'
-            
-            if tcr_response.status_code == 200:
-                tcr_results = tcr_response.json().get('QueryResult', {}).get('Results', [])
-                if tcr_results:
-                    latest_result = tcr_results[0]
-                    tcr_id = latest_result.get('ObjectID', 'N/A')
-                    date_time = latest_result.get('Date', 'N/A')
-                    verdict = latest_result.get('Verdict', verdict)
-            
-            if verdict == 'Pass':
-                test_data["passed"] += 1
-            elif verdict == 'Fail':
-                test_data["failed"] += 1
-            else:
-                test_data["other"] += 1
-            
-            test_data["test_cases"].append({
-                "test_case_id": test_case_id,
-                "test_case_name": test_case_name,
-                "tcr_id": tcr_id,
-                "date_time": date_time,
-                "verdict": verdict
-            })
+            try:
+                test_case_id = test_case.get('FormattedID', 'Unknown')
+                print(f"Processing test case: {test_case_id}")
+                
+                test_case_name = test_case.get('Name', 'Unnamed Test')
+                verdict = test_case.get('LastVerdict', 'No Run')
+                
+                # Get the latest test case result with better error handling
+                tcr_params = {
+                    "workspace": f"/workspace/{workspace_id}",
+                    "query": f"(TestCase.FormattedID = {test_case_id})",
+                    "fetch": "ObjectID,Date,Verdict",
+                    "pagesize": 1,
+                    "order": "Date DESC"
+                }
+                
+                tcr_id = 'N/A'
+                date_time = 'N/A'
+                
+                try:
+                    tcr_response = session.get(
+                        f"{base_endpoint}/testcaseresult",
+                        params=tcr_params
+                    )
+                    
+                    if tcr_response and tcr_response.status_code == 200:
+                        tcr_data = tcr_response.json()
+                        if tcr_data and isinstance(tcr_data, dict):
+                            query_result = tcr_data.get('QueryResult', {})
+                            if query_result and isinstance(query_result, dict):
+                                tcr_results = query_result.get('Results', [])
+                                if tcr_results and len(tcr_results) > 0:
+                                    latest_result = tcr_results[0]
+                                    tcr_id = latest_result.get('ObjectID', 'N/A')
+                                    date_time = latest_result.get('Date', 'N/A')
+                                    verdict = latest_result.get('Verdict', verdict)
+                except Exception as e:
+                    print(f"Error processing test case result for {test_case_id}: {str(e)}")
+                
+                # Update counters based on verdict
+                if verdict == 'Pass':
+                    test_data["passed"] += 1
+                elif verdict == 'Fail':
+                    test_data["failed"] += 1
+                else:
+                    test_data["other"] += 1
+                
+                # Add test case to the list with safe data
+                test_data["test_cases"].append({
+                    "test_case_id": test_case_id,
+                    "test_case_name": test_case_name,
+                    "tcr_id": tcr_id,
+                    "date_time": date_time,
+                    "verdict": verdict
+                })
+                
+            except Exception as e:
+                print(f"Error processing test case {test_case.get('FormattedID', 'Unknown')}: {str(e)}")
+                continue
         
-        # Calculate pass percentage
+        # Calculate statistics safely
+        if all_test_cases:
+            try:
+                automated_count = len([tc for tc in all_test_cases 
+                                    if tc.get('Method', '').lower() == 'automated' or 
+                                    tc.get('Type', '').lower() == 'automated'])
+                
+                execution_times = []
+                for tc in all_test_cases:
+                    last_result = tc.get('LastResult', {})
+                    if last_result and isinstance(last_result, dict):
+                        try:
+                            duration = float(last_result.get('Duration', 0) or 0)
+                            if duration > 0:
+                                execution_times.append(duration)
+                        except (ValueError, TypeError):
+                            pass
+                
+                avg_time = sum(execution_times) / len(execution_times) if execution_times else 0
+                
+                test_data["statistics"] = {
+                    "automation_coverage": (automated_count / len(all_test_cases) * 100) if len(all_test_cases) > 0 else 0,
+                    "flaky_tests": len([tc for tc in test_data["test_cases"] 
+                                    if tc["verdict"] == 'Fail' and 
+                                    any(prev["verdict"] == 'Pass' for prev in test_data["test_cases"])]),
+                    "never_run": len([tc for tc in all_test_cases 
+                                    if not tc.get('LastRun') or 
+                                    not tc.get('LastResult')]),
+                    "avg_execution_time": avg_time
+                }
+            except Exception as e:
+                print(f"Error calculating statistics: {str(e)}")
+                test_data["statistics"] = {}
+        
+        # Calculate pass percentage safely
         if test_data["total_tests"] > 0:
             test_data["pass_percentage"] = (test_data["passed"] / test_data["total_tests"]) * 100
         
@@ -491,49 +539,6 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
         print(f"Passed: {test_data['passed']}")
         print(f"Failed: {test_data['failed']}")
         print(f"Other: {test_data['other']}")
-        
-        # After processing all test cases, calculate statistics
-        if all_test_cases:
-            automated_count = len([tc for tc in all_test_cases 
-                                 if tc.get('Method', '').lower() == 'automated' or 
-                                    tc.get('Type', '').lower() == 'automated'])
-            
-            # Calculate execution times from Results
-            execution_times = []
-            for tc in all_test_cases:
-                if tc.get('LastResult', {}).get('Duration'):
-                    try:
-                        duration = float(tc['LastResult']['Duration'])
-                        execution_times.append(duration)
-                    except (ValueError, TypeError):
-                        pass
-            
-            avg_time = sum(execution_times) / len(execution_times) if execution_times else 0
-            
-            test_data["statistics"] = {
-                "automation_coverage": (automated_count / len(all_test_cases) * 100),
-                "flaky_tests": len([tc for tc in test_data["test_cases"] 
-                                  if tc["verdict"] == 'Fail' and 
-                                  any(prev["verdict"] == 'Pass' for prev in test_data["test_cases"])]),
-                "never_run": len([tc for tc in all_test_cases 
-                                if not tc.get('LastRun') or 
-                                not tc.get('LastResult')]),
-                "avg_execution_time": avg_time,
-                "priority_distribution": {
-                    "High": len([tc for tc in all_test_cases if tc.get('Priority', '').lower() == 'high']),
-                    "Medium": len([tc for tc in all_test_cases if tc.get('Priority', '').lower() == 'medium']),
-                    "Low": len([tc for tc in all_test_cases if tc.get('Priority', '').lower() == 'low'])
-                },
-                "status_distribution": {
-                    status: len([tc for tc in all_test_cases if tc.get('TestCaseStatus', '') == status])
-                    for status in set(tc.get('TestCaseStatus', '') for tc in all_test_cases if tc.get('TestCaseStatus'))
-                },
-                "owner_distribution": {
-                    owner.get('_refObjectName', 'Unassigned'): len([tc for tc in all_test_cases 
-                        if tc.get('Owner', {}).get('_refObjectName') == owner.get('_refObjectName')])
-                    for owner in set([tc.get('Owner', {}) for tc in all_test_cases if tc.get('Owner')])
-                }
-            }
         
         # Calculate failure trends for last 10 days
         today = datetime.now()
