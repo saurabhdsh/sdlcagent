@@ -601,9 +601,9 @@ elif ops_agents_enabled and selected_ops == "🔍 Failure Analysis":
                             title='Test Case Status Distribution',
                             color='Status',
                             color_discrete_map={
-                                'Passed': '#2E7D32',
-                                'Failed': '#C62828',
-                                'Other': '#FFA726'
+                                'Passed': '#4CAF50',
+                                'Failed': '#FF6B6B',
+                                'Other': '#FFB74D'
                             }
                         )
                         
@@ -642,9 +642,9 @@ elif ops_agents_enabled and selected_ops == "🔍 Failure Analysis":
                             title='Test Case Distribution (%)',
                             color='Category',
                             color_discrete_map={
-                                'Passed': '#2E7D32',
-                                'Failed': '#C62828',
-                                'Other': '#FFA726'
+                                'Passed': '#4CAF50',
+                                'Failed': '#FF6B6B',
+                                'Other': '#FFB74D'
                             }
                         )
                         
@@ -683,11 +683,11 @@ elif ops_agents_enabled and selected_ops == "🔍 Failure Analysis":
                                 y=["Failure Rate"],
                                 z=[df_trend["Failure Rate"]],
                                 colorscale=[
-                                    [0, '#1B5E20'],      # Dark green for low values
-                                    [0.4, '#81C784'],    # Light green
+                                    [0, '#4CAF50'],      # Softer green for low values
+                                    [0.4, '#A5D6A7'],    # Very light green
                                     [0.6, '#FFCC80'],    # Light orange
-                                    [0.8, '#FF7043'],    # Orange
-                                    [1, '#B71C1C']       # Dark red for high values
+                                    [0.8, '#FF8A65'],    # Soft orange
+                                    [1, '#FF6B6B']       # Soft red for high values
                                 ],
                                 hoverongaps=False,
                                 hovertemplate="Date: %{x}<br>Failure Rate: %{z:.1f}%<extra></extra>",
@@ -727,7 +727,7 @@ elif ops_agents_enabled and selected_ops == "🔍 Failure Analysis":
                                 x=df_trend["Date"],
                                 y=df_trend["Total Tests"],
                                 name="Total Tests",
-                                line=dict(color="#2E7D32", width=3),
+                                line=dict(color="#4CAF50", width=3),
                                 mode='lines+markers'
                             ))
                             
@@ -736,7 +736,7 @@ elif ops_agents_enabled and selected_ops == "🔍 Failure Analysis":
                                 x=df_trend["Date"],
                                 y=df_trend["Failed Tests"],
                                 name="Failed Tests",
-                                line=dict(color="#C62828", width=3),
+                                line=dict(color="#FF6B6B", width=3),
                                 mode='lines+markers'
                             ))
                             
@@ -762,6 +762,114 @@ elif ops_agents_enabled and selected_ops == "🔍 Failure Analysis":
                             fig_line.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
                             
                             st.plotly_chart(fig_line, use_container_width=True)
+
+                            # Add Top 5 Failures Analysis
+                            st.subheader("🎯 Top Failing Test Cases")
+
+                            # Create a DataFrame of all failed tests
+                            failed_tests = [tc for tc in test_data["test_cases"] if tc["verdict"] == "Fail"]
+                            if failed_tests:
+                                df_failed = pd.DataFrame(failed_tests)
+                                
+                                # Count failures by test case
+                                failure_counts = df_failed.groupby(['test_case_id', 'test_case_name']).size().reset_index(name='failures')
+                                failure_counts = failure_counts.sort_values('failures', ascending=False)
+                                
+                                # Get top 5 failing tests
+                                top_5_failures = failure_counts.head(5)
+                                
+                                # Create two columns
+                                fail_col1, fail_col2 = st.columns([2, 1])
+                                
+                                with fail_col1:
+                                    # Create bar chart for top 5 failures
+                                    fig_top_failures = go.Figure()
+                                    
+                                    fig_top_failures.add_trace(go.Bar(
+                                        x=top_5_failures['test_case_id'],
+                                        y=top_5_failures['failures'],
+                                        text=top_5_failures['failures'],
+                                        textposition='auto',
+                                        marker_color='#FF6B6B',  # Softer red color
+                                        hovertemplate=(
+                                            "<b>%{x}</b><br>" +
+                                            "Failures: %{y}<br>" +
+                                            "<extra></extra>"
+                                        )
+                                    ))
+                                    
+                                    fig_top_failures.update_layout(
+                                        title={
+                                            'text': "Top 5 Failing Test Cases",
+                                            'y':0.95,
+                                            'x':0.5,
+                                            'xanchor': 'center',
+                                            'yanchor': 'top'
+                                        },
+                                        xaxis_title="Test Case ID",
+                                        yaxis_title="Number of Failures",
+                                        plot_bgcolor='rgba(0,0,0,0)',
+                                        paper_bgcolor='rgba(0,0,0,0)',
+                                        showlegend=False,
+                                        margin=dict(l=20, r=20, t=40, b=20),
+                                        height=400
+                                    )
+                                    
+                                    fig_top_failures.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+                                    fig_top_failures.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+                                    
+                                    st.plotly_chart(fig_top_failures, use_container_width=True)
+                                
+                                with fail_col2:
+                                    # Most common failing test details
+                                    most_common = failure_counts.iloc[0]
+                                    
+                                    st.markdown("""
+                                        <style>
+                                        .failure-card {
+                                            background-color: #FFF5F5;
+                                            border-radius: 10px;
+                                            padding: 20px;
+                                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                                            margin-bottom: 20px;
+                                        }
+                                        .failure-title {
+                                            color: #C53030;
+                                            font-size: 1.1em;
+                                            font-weight: bold;
+                                            margin-bottom: 15px;
+                                        }
+                                        .failure-metric {
+                                            color: #2D3748;
+                                            font-size: 1.8em;
+                                            font-weight: bold;
+                                            margin: 10px 0;
+                                        }
+                                        .failure-label {
+                                            color: #718096;
+                                            font-size: 0.9em;
+                                        }
+                                        </style>
+                                        """, unsafe_allow_html=True)
+                                    
+                                    st.markdown("""
+                                        <div class="failure-card">
+                                            <div class="failure-title">Most Common Failure</div>
+                                            <div class="failure-label">Test Case ID</div>
+                                            <div class="failure-metric">{}</div>
+                                            <div class="failure-label">Test Name</div>
+                                            <div class="failure-metric" style="font-size: 1.2em">{}</div>
+                                            <div class="failure-label">Failure Count</div>
+                                            <div class="failure-metric">{}</div>
+                                        </div>
+                                    """.format(
+                                        most_common['test_case_id'],
+                                        most_common['test_case_name'][:40] + '...' if len(most_common['test_case_name']) > 40 else most_common['test_case_name'],
+                                        most_common['failures']
+                                    ), unsafe_allow_html=True)
+
+                            else:
+                                st.info("No failed tests found for this user story")
                         else:
                             st.info("No trend data available for the selected time period")
                     else:
