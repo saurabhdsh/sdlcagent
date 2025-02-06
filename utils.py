@@ -418,44 +418,62 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
         # Process test cases with better error handling
         for test_case in all_test_cases:
             try:
-                test_case_id = test_case.get('FormattedID', 'Unknown')
+                # Safely get test case data with better error handling
+                if not isinstance(test_case, dict):
+                    print(f"Invalid test case data format: {test_case}")
+                    continue
+
+                test_case_id = test_case.get('FormattedID')
+                if not test_case_id:
+                    print("Missing test case ID, skipping...")
+                    continue
+
                 print(f"Processing test case: {test_case_id}")
                 
-                # Safely get test case data with defaults
-                test_case_name = test_case.get('Name', 'Unnamed Test')
-                verdict = test_case.get('LastVerdict', 'No Run')
-                date_time = test_case.get('LastRun', 'N/A')
-                
+                # Get LastVerdict directly from LastResult if available
+                last_result = test_case.get('LastResult', {})
+                if isinstance(last_result, dict):
+                    verdict = last_result.get('Verdict', test_case.get('LastVerdict', 'No Run'))
+                else:
+                    verdict = test_case.get('LastVerdict', 'No Run')
+
+                # Safely get all test case attributes with defaults
+                test_case_data = {
+                    "test_case_id": test_case_id,
+                    "test_case_name": test_case.get('Name', 'Unnamed Test'),
+                    "tcr_id": test_case.get('ObjectID', 'N/A'),
+                    "date_time": test_case.get('LastRun', 'N/A'),
+                    "verdict": verdict,
+                    "LastBuild": test_case.get('LastBuild', 'Unknown'),
+                    "Duration": test_case.get('Duration', 'N/A'),
+                    "Owner": (test_case.get('Owner', {}) or {}).get('_refObjectName', 'Unassigned'),
+                    "Results": test_case.get('Results', [])
+                }
+
                 # Update counters based on verdict
                 if verdict == 'Pass':
                     test_data["passed"] += 1
                 elif verdict == 'Fail':
                     test_data["failed"] += 1
+                    print(f"Found failed test: {test_case_id}")  # Debug logging
                 else:
                     test_data["other"] += 1
                 
-                # Add test case to the list with safe data
-                test_case_data = {
-                    "test_case_id": test_case_id,
-                    "test_case_name": test_case_name,
-                    "tcr_id": test_case.get('ObjectID', 'N/A'),
-                    "date_time": date_time if date_time else 'N/A',
-                    "verdict": verdict,
-                    "LastBuild": test_case.get('LastBuild', 'Unknown'),
-                    "Duration": test_case.get('Duration', 'N/A'),
-                    "Owner": test_case.get('Owner', {}).get('_refObjectName', 'Unassigned')
-                }
+                # Add test case to the list
                 test_data["test_cases"].append(test_case_data)
                 
             except Exception as e:
                 print(f"Error processing test case {test_case.get('FormattedID', 'Unknown')}: {str(e)}")
+                print(f"Test case data: {test_case}")
                 continue
-        
+
         # Calculate pass percentage safely
-        if test_data["total_tests"] > 0:
-            test_data["pass_percentage"] = (test_data["passed"] / test_data["total_tests"]) * 100
-        
-        # Initialize and calculate failure trends
+        total_tests = len(test_data["test_cases"])
+        test_data["total_tests"] = total_tests
+        if total_tests > 0:
+            test_data["pass_percentage"] = (test_data["passed"] / total_tests) * 100
+
+        # Initialize and calculate failure trends with better error handling
         today = datetime.now()
         for i in range(10):
             date = (today - timedelta(days=i)).strftime('%Y-%m-%d')
@@ -465,49 +483,66 @@ def get_user_story_test_data(workspace_id: str, project_id: str, story_id: str) 
                 "failure_rate": 0,
                 "failure_details": []
             }
-        
+
         # Process test results for trend with better error handling
         for test_case in test_data["test_cases"]:
             try:
-                if test_case["date_time"] and test_case["date_time"] != 'N/A':
-                    date = test_case["date_time"].split('T')[0] if 'T' in test_case["date_time"] else test_case["date_time"]
+                date_time = test_case.get("date_time")
+                if date_time and date_time != 'N/A':
+                    # Handle different date formats
+                    try:
+                        if 'T' in date_time:
+                            date = date_time.split('T')[0]
+                        else:
+                            # Try to parse the date if it's in a different format
+                            parsed_date = datetime.strptime(date_time, '%Y-%m-%d')
+                            date = parsed_date.strftime('%Y-%m-%d')
+                    except ValueError:
+                        print(f"Invalid date format: {date_time}")
+                        continue
+
                     if date in test_data["failure_trend"]:
                         test_data["failure_trend"][date]["total"] += 1
                         if test_case["verdict"] == 'Fail':
                             test_data["failure_trend"][date]["failed"] += 1
-                            test_data["failure_trend"][date]["failure_details"].append({
+                            # Add more detailed failure information
+                            failure_detail = {
                                 "test_case_id": test_case["test_case_id"],
                                 "test_case_name": test_case["test_case_name"],
                                 "build": test_case.get("LastBuild", "Unknown"),
                                 "execution_time": test_case.get("Duration", "N/A"),
                                 "owner": test_case.get("Owner", "Unassigned")
-                            })
+                            }
+                            
+                            # Add to failure details if not already present
+                            if failure_detail not in test_data["failure_trend"][date]["failure_details"]:
+                                test_data["failure_trend"][date]["failure_details"].append(failure_detail)
+                                print(f"Added failure detail for test {test_case['test_case_id']} on {date}")  # Debug logging
+
             except Exception as e:
                 print(f"Error processing trend data for test case {test_case.get('test_case_id', 'Unknown')}: {str(e)}")
                 continue
-        
+
         # Calculate failure rates safely
         for date in test_data["failure_trend"]:
-            total = test_data["failure_trend"][date]["total"]
-            if total > 0:
-                test_data["failure_trend"][date]["failure_rate"] = (
-                    test_data["failure_trend"][date]["failed"] / total * 100
-                )
-        
-        # Calculate daily trends
-        test_data["daily_trend"] = {
-            date: {
-                "total": data["total"],
-                "failed": data["failed"],
-                "failure_rate": data["failure_rate"],
-                "failure_details": data.get("failure_details", []),
-                "success_rate": ((data["total"] - data["failed"]) / data["total"] * 100) if data["total"] > 0 else 0
-            }
-            for date, data in test_data["failure_trend"].items()
-        }
-        
+            try:
+                total = test_data["failure_trend"][date]["total"]
+                failed = test_data["failure_trend"][date]["failed"]
+                if total > 0:
+                    test_data["failure_trend"][date]["failure_rate"] = (failed / total) * 100
+            except Exception as e:
+                print(f"Error calculating failure rate for date {date}: {str(e)}")
+                continue
+
+        print(f"Final test data summary:")
+        print(f"Total Tests: {test_data['total_tests']}")
+        print(f"Failed Tests: {test_data['failed']}")
+        print(f"Passed Tests: {test_data['passed']}")
+        print(f"Other Tests: {test_data['other']}")
+        print(f"Failure Details Count: {sum(len(data['failure_details']) for data in test_data['failure_trend'].values())}")
+
         return test_data
-        
+
     except Exception as e:
         logging.error(f"Error fetching test data: {str(e)}")
         return {
