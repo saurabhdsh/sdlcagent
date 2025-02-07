@@ -296,6 +296,7 @@ def plot_test_case_status(test_cases_results: List[Dict]) -> None:
         statuses = ['Pass', 'Fail', 'No Run']
         
         for status in statuses:
+            x_data = test_cases
             y_data = []
             dates = []
             for tc in test_cases:
@@ -306,14 +307,13 @@ def plot_test_case_status(test_cases_results: List[Dict]) -> None:
             
             fig.add_trace(go.Bar(
                 name=status,
-                y=test_cases,  # Test Case IDs on Y-axis
-                x=y_data,      # Counts on X-axis
-                orientation='h',  # Horizontal bars
+                x=x_data,      # Test Case IDs on X-axis
+                y=y_data,      # Counts on Y-axis
                 marker_color='#4CAF50' if status == 'Pass' else '#FF6B6B' if status == 'Fail' else '#FFB74D',
                 customdata=dates,  # Add dates for hover
-                hovertemplate="<b>%{y}</b><br>" +
+                hovertemplate="<b>%{x}</b><br>" +
                             "Status: %{data.name}<br>" +
-                            "Count: %{x}<br>" +
+                            "Count: %{y}<br>" +
                             "Date: %{customdata}<br>" +
                             "<extra></extra>"
             ))
@@ -321,8 +321,8 @@ def plot_test_case_status(test_cases_results: List[Dict]) -> None:
         # Update layout
         fig.update_layout(
             title='Test Case Wise Fail Vs Pass History',
-            yaxis_title='Test Case ID',
-            xaxis_title='Count',
+            xaxis_title='Test Case ID',
+            yaxis_title='Count',
             barmode='stack',
             showlegend=True,
             legend=dict(
@@ -333,17 +333,17 @@ def plot_test_case_status(test_cases_results: List[Dict]) -> None:
                 x=1
             ),
             plot_bgcolor='white',
-            height=max(500, len(test_cases) * 25)
+            height=500  # Fixed height since bars are vertical now
         )
         
         # Update axes
-        fig.update_yaxes(
+        fig.update_xaxes(
+            tickangle=45,  # Angle the test case IDs for better readability
             showgrid=True,
             gridwidth=1,
-            gridcolor='LightGray',
-            autorange="reversed"  # Show test cases in ascending order from top to bottom
+            gridcolor='LightGray'
         )
-        fig.update_xaxes(
+        fig.update_yaxes(
             showgrid=True,
             gridwidth=1,
             gridcolor='LightGray'
