@@ -1,8 +1,11 @@
 import requests
 import json
-from typing import Dict, Any
+from typing import Dict, Any, List
 import urllib3
 import warnings
+import plotly.graph_objects as go
+from collections import defaultdict
+from datetime import datetime
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -139,7 +142,7 @@ def get_test_case_details(workspace_id: str, test_case_id: str) -> Dict[str, Any
         results_params = {
             "workspace": f"/workspace/{workspace_id}",
             "query": f"(TestCase.ObjectID = {test_case_oid})",
-            "fetch": "Build,Date,Verdict,TestCase,WorkProduct,Tester,Notes,Attachments",
+            "fetch": "Build,Date,Verdict,TestCase,WorkProduct,Tester",
             "pagesize": 100,
             "order": "Date DESC"
         }
@@ -165,8 +168,7 @@ def get_test_case_details(workspace_id: str, test_case_id: str) -> Dict[str, Any
                     "date": result.get('Date', 'N/A'),
                     "verdict": result.get('Verdict', 'N/A'),
                     "work_product": (result.get('WorkProduct', {}) or {}).get('_refObjectName', 'N/A'),
-                    "tester": (result.get('Tester', {}) or {}).get('_refObjectName', 'N/A'),
-                    "notes": result.get('Notes', 'N/A')
+                    "tester": (result.get('Tester', {}) or {}).get('_refObjectName', 'N/A')
                 }
                 test_case_history["results"].append(result_data)
             
@@ -179,6 +181,77 @@ def get_test_case_details(workspace_id: str, test_case_id: str) -> Dict[str, Any
         print(f"Error fetching test case details: {str(e)}")
         print(f"Full error details: {e.__class__.__name__}")
         return None
+
+def plot_test_failure_trend(test_cases_results: List[Dict]) -> None:
+    """Plot test case failures by date"""
+    # Initialize data structure for failures by date
+    failures_by_date = defaultdict(lambda: {"total": 0, "failed": 0})
+    
+    # Process test case results
+    for result in test_cases_results:
+        date_str = result.get('date', 'N/A')
+        if date_str != 'N/A':
+            try:
+                # Convert to date only string (YYYY-MM-DD)
+                date = date_str.split('T')[0] if 'T' in date_str else date_str
+                failures_by_date[date]["total"] += 1
+                if result.get('verdict') == 'Fail':
+                    failures_by_date[date]["failed"] += 1
+            except Exception as e:
+                print(f"Error processing date {date_str}: {str(e)}")
+    
+    if failures_by_date:
+        # Sort dates
+        dates = sorted(failures_by_date.keys())
+        total_tests = [failures_by_date[date]["total"] for date in dates]
+        failed_tests = [failures_by_date[date]["failed"] for date in dates]
+        
+        # Create the figure
+        fig = go.Figure()
+        
+        # Add total tests line
+        fig.add_trace(go.Scatter(
+            x=dates,
+            y=total_tests,
+            name="Total Tests",
+            line=dict(color="#4CAF50", width=2),
+            mode='lines+markers'
+        ))
+        
+        # Add failed tests line
+        fig.add_trace(go.Scatter(
+            x=dates,
+            y=failed_tests,
+            name="Failed Tests",
+            line=dict(color="#FF6B6B", width=2),
+            mode='lines+markers'
+        ))
+        
+        # Update layout
+        fig.update_layout(
+            title="Test Case Execution Trend",
+            xaxis_title="Date",
+            yaxis_title="Number of Tests",
+            hovermode='x unified',
+            showlegend=True,
+            plot_bgcolor='white',
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
+        )
+        
+        # Update axes
+        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+        
+        # Show the plot
+        fig.show()
+    else:
+        print("No trend data available")
 
 def get_test_case_results(workspace_id: str, project_id: str, story_id: str) -> Dict[str, Any]:
     """Fetch test case results for a specific user story"""
@@ -234,7 +307,22 @@ def get_test_case_results(workspace_id: str, project_id: str, story_id: str) -> 
             print(f"Error fetching test cases: {str(e)}")
             break
     
-    # Process and display results
+    # Collect all test results for trend analysis
+    all_results = []
+    
+    # Process each test case
+    for test_case in all_test_cases:
+        test_case_id = test_case.get('FormattedID')
+        if test_case_id:
+            tc_details = get_test_case_details(workspace_id, test_case_id)
+            if tc_details and tc_details.get("results"):
+                all_results.extend(tc_details["results"])
+    
+    # Plot the trend before showing individual test case details
+    print("\nGenerating test execution trend chart...")
+    plot_test_failure_trend(all_results)
+    
+    # Continue with existing test case details display
     print(f"\nTest Cases for User Story {story_id}:")
     print("=" * 100)
     print(f"{'Test Case ID':<15} {'Test Case Name':<50} {'Priority':<10} {'Last Verdict':<10}")
@@ -274,8 +362,6 @@ def get_test_case_results(workspace_id: str, project_id: str, story_id: str) -> 
                 print(f"{result['build'][:20]:<20} {result['date'][:25]:<25} "
                       f"{result['work_product'][:30]:<30} {result['verdict']:<10} "
                       f"{result['tester'][:20]:<20}")
-                if result['notes'] != 'N/A':
-                    print(f"Notes: {result['notes']}\n")
             
             test_data["selected_test_case"] = tc_details
     
