@@ -110,10 +110,35 @@ def get_test_case_details(workspace_id: str, test_case_id: str) -> Dict[str, Any
     }
     
     try:
-        # Fetch test case results with all required fields
+        # First verify the test case exists
+        test_case_params = {
+            "workspace": f"/workspace/{workspace_id}",
+            "query": f"(FormattedID = {test_case_id})",
+            "fetch": "ObjectID,FormattedID,Name"
+        }
+        
+        test_case_response = requests.get(
+            f"{RALLY_ENDPOINT}/testcase",
+            headers=headers,
+            params=test_case_params,
+            verify=False
+        )
+        
+        if test_case_response.status_code != 200:
+            print(f"Error fetching test case: {test_case_response.status_code}")
+            return None
+            
+        test_case_data = test_case_response.json()
+        if not test_case_data.get('QueryResult', {}).get('Results'):
+            print(f"Test case {test_case_id} not found")
+            return None
+            
+        test_case_oid = test_case_data['QueryResult']['Results'][0]['ObjectID']
+        
+        # Now fetch test case results with all required fields
         results_params = {
             "workspace": f"/workspace/{workspace_id}",
-            "query": f"(TestCase.FormattedID = {test_case_id})",
+            "query": f"(TestCase.ObjectID = {test_case_oid})",
             "fetch": "Build,Date,Verdict,TestCase,WorkProduct,Tester,Notes,Attachments",
             "pagesize": 100,
             "order": "Date DESC"
@@ -139,16 +164,20 @@ def get_test_case_details(workspace_id: str, test_case_id: str) -> Dict[str, Any
                     "build": result.get('Build', 'N/A'),
                     "date": result.get('Date', 'N/A'),
                     "verdict": result.get('Verdict', 'N/A'),
-                    "work_product": result.get('WorkProduct', {}).get('_refObjectName', 'N/A'),
-                    "tester": result.get('Tester', {}).get('_refObjectName', 'N/A'),
+                    "work_product": (result.get('WorkProduct', {}) or {}).get('_refObjectName', 'N/A'),
+                    "tester": (result.get('Tester', {}) or {}).get('_refObjectName', 'N/A'),
                     "notes": result.get('Notes', 'N/A')
                 }
                 test_case_history["results"].append(result_data)
+            
+            if not test_case_history["results"]:
+                print(f"No test results found for {test_case_id}")
             
             return test_case_history
             
     except Exception as e:
         print(f"Error fetching test case details: {str(e)}")
+        print(f"Full error details: {e.__class__.__name__}")
         return None
 
 def get_test_case_results(workspace_id: str, project_id: str, story_id: str) -> Dict[str, Any]:
