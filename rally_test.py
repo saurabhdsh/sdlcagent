@@ -101,6 +101,56 @@ def get_user_stories(workspace_id: str, project_id: str):
         return stories
     return None
 
+def get_test_case_details(workspace_id: str, test_case_id: str) -> Dict[str, Any]:
+    """Fetch detailed results for a specific test case"""
+    headers = {
+        "zsessionid": RALLY_API_KEY,
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    
+    try:
+        # Fetch test case results with all required fields
+        results_params = {
+            "workspace": f"/workspace/{workspace_id}",
+            "query": f"(TestCase.FormattedID = {test_case_id})",
+            "fetch": "Build,Date,Verdict,TestCase,WorkProduct,Tester,Notes,Attachments",
+            "pagesize": 100,
+            "order": "Date DESC"
+        }
+        
+        response = requests.get(
+            f"{RALLY_ENDPOINT}/testcaseresult",
+            headers=headers,
+            params=results_params,
+            verify=False
+        )
+        
+        if response.status_code == 200:
+            results = response.json().get('QueryResult', {}).get('Results', [])
+            
+            test_case_history = {
+                "test_case_id": test_case_id,
+                "results": []
+            }
+            
+            for result in results:
+                result_data = {
+                    "build": result.get('Build', 'N/A'),
+                    "date": result.get('Date', 'N/A'),
+                    "verdict": result.get('Verdict', 'N/A'),
+                    "work_product": result.get('WorkProduct', {}).get('_refObjectName', 'N/A'),
+                    "tester": result.get('Tester', {}).get('_refObjectName', 'N/A'),
+                    "notes": result.get('Notes', 'N/A')
+                }
+                test_case_history["results"].append(result_data)
+            
+            return test_case_history
+            
+    except Exception as e:
+        print(f"Error fetching test case details: {str(e)}")
+        return None
+
 def get_test_case_results(workspace_id: str, project_id: str, story_id: str) -> Dict[str, Any]:
     """Fetch test case results for a specific user story"""
     headers = {
@@ -109,24 +159,23 @@ def get_test_case_results(workspace_id: str, project_id: str, story_id: str) -> 
         "Accept": "application/json"
     }
     
+    # First get all test cases for the user story
     all_test_cases = []
     start = 1
     page_size = 100
     
     while True:
-        # First fetch test cases for the user story with pagination
         test_case_params = {
             "workspace": f"/workspace/{workspace_id}",
             "project": f"/project/{project_id}",
             "query": f"(WorkProduct.FormattedID = {story_id})",
-            "fetch": "FormattedID,Name,LastVerdict,LastRun,ObjectID",
+            "fetch": "FormattedID,Name,LastVerdict,LastRun,ObjectID,Method,Priority",
             "pagesize": page_size,
             "start": start,
             "order": "FormattedID ASC"
         }
         
         try:
-            # Get test cases for current page
             test_case_response = requests.get(
                 f"{RALLY_ENDPOINT}/testcase",
                 headers=headers,
@@ -157,75 +206,49 @@ def get_test_case_results(workspace_id: str, project_id: str, story_id: str) -> 
             break
     
     # Process and display results
-    print(f"\nTest Results for User Story {story_id}:")
+    print(f"\nTest Cases for User Story {story_id}:")
     print("=" * 100)
-    print(f"{'Test Case ID':<15} {'Test Case Name':<30} {'TCR ID':<15} {'Verdict':<10} {'Date and Time'}")
+    print(f"{'Test Case ID':<15} {'Test Case Name':<50} {'Priority':<10} {'Last Verdict':<10}")
     print("-" * 100)
     
     test_data = {
         "total_tests": len(all_test_cases),
-        "passed": 0,
-        "failed": 0,
-        "results": []
+        "test_cases": []
     }
     
-    # Now get the latest test case results for each test case
     for test_case in all_test_cases:
-        test_case_id = test_case.get('FormattedID')
-        test_case_name = test_case.get('Name', 'Unnamed Test')
-        verdict = test_case.get('LastVerdict', 'No Run')
-        
-        # Get the latest test case result
-        tcr_params = {
-            "workspace": f"/workspace/{workspace_id}",
-            "query": f"(TestCase.FormattedID = {test_case_id})",
-            "fetch": "ObjectID,Date,Verdict",
-            "pagesize": 1,
-            "order": "Date DESC"
+        test_case_data = {
+            "test_case_id": test_case.get('FormattedID', 'N/A'),
+            "test_case_name": test_case.get('Name', 'Unnamed Test'),
+            "priority": test_case.get('Priority', 'N/A'),
+            "last_verdict": test_case.get('LastVerdict', 'No Run'),
+            "method": test_case.get('Method', 'Manual')
         }
+        test_data["test_cases"].append(test_case_data)
         
-        tcr_response = requests.get(
-            f"{RALLY_ENDPOINT}/testcaseresult",
-            headers=headers,
-            params=tcr_params,
-            verify=False
-        )
-        
-        tcr_id = 'N/A'
-        date_time = 'N/A'
-        
-        if tcr_response.status_code == 200:
-            tcr_results = tcr_response.json().get('QueryResult', {}).get('Results', [])
-            if tcr_results:
-                latest_result = tcr_results[0]
-                tcr_id = latest_result.get('ObjectID', 'N/A')
-                date_time = latest_result.get('Date', 'N/A')
-                verdict = latest_result.get('Verdict', verdict)
-        
-        if verdict == 'Pass':
-            test_data["passed"] += 1
-        elif verdict == 'Fail':
-            test_data["failed"] += 1
-        
-        # Store result details
-        result_data = {
-            "test_case_id": test_case_id,
-            "test_case_name": test_case_name,
-            "tcr_id": tcr_id,
-            "verdict": verdict,
-            "date_time": date_time
-        }
-        test_data["results"].append(result_data)
-        
-        # Print result details
-        print(f"{result_data['test_case_id']:<15} {result_data['test_case_name'][:30]:<30} "
-              f"{result_data['tcr_id']:<15} {result_data['verdict']:<10} {result_data['date_time']}")
+        print(f"{test_case_data['test_case_id']:<15} {test_case_data['test_case_name'][:50]:<50} "
+              f"{test_case_data['priority']:<10} {test_case_data['last_verdict']:<10}")
     
-    # Print summary
-    print("\nSummary:")
-    print(f"Total Test Cases: {test_data['total_tests']}")
-    print(f"Passed: {test_data['passed']}")
-    print(f"Failed: {test_data['failed']}")
+    # Allow user to select a test case for detailed results
+    print("\nEnter a Test Case ID to see detailed results (or press Enter to skip)")
+    selected_tc = input("Test Case ID: ")
+    
+    if selected_tc:
+        tc_details = get_test_case_details(workspace_id, selected_tc)
+        if tc_details and tc_details["results"]:
+            print(f"\nDetailed Results for Test Case {selected_tc}:")
+            print("=" * 120)
+            print(f"{'Build':<20} {'Date':<25} {'Work Product':<30} {'Verdict':<10} {'Tester':<20}")
+            print("-" * 120)
+            
+            for result in tc_details["results"]:
+                print(f"{result['build'][:20]:<20} {result['date'][:25]:<25} "
+                      f"{result['work_product'][:30]:<30} {result['verdict']:<10} "
+                      f"{result['tester'][:20]:<20}")
+                if result['notes'] != 'N/A':
+                    print(f"Notes: {result['notes']}\n")
+            
+            test_data["selected_test_case"] = tc_details
     
     return test_data
 
