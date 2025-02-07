@@ -263,7 +263,7 @@ def plot_test_case_status(test_cases_results: List[Dict]) -> None:
     
     for result in test_cases_results:
         status_data.append({
-            'Test Case': result.get('test_case_name', 'Unknown'),
+            'Test Case': result.get('test_case_id', 'Unknown'),  # Changed from test_case_name
             'Status': result.get('verdict', 'No Run'),
             'Date': result.get('date', 'N/A').split('T')[0] if 'T' in result.get('date', 'N/A') else result.get('date', 'N/A'),
             'Build': result.get('build', 'N/A')
@@ -319,15 +319,13 @@ def plot_test_case_status(test_cases_results: List[Dict]) -> None:
         # Show plotly chart
         fig.show()
         
-        # Create Pygwalker visualization
-        print("\nGenerating interactive Pygwalker visualization...")
-        walker = pyg.walk(df, return_html=True)
-        
-        # Save the visualization to an HTML file
-        with open('test_case_analysis.html', 'w') as f:
-            f.write(walker)
-        print("Interactive visualization saved to 'test_case_analysis.html'")
-        
+        try:
+            # Generate Pygwalker visualization
+            print("\nGenerating interactive Pygwalker visualization...")
+            pyg.walk(df, env='Jupyter')  # Changed to use Jupyter environment
+        except Exception as e:
+            print(f"Error generating Pygwalker visualization: {str(e)}")
+            print("Continuing with basic visualization...")
     else:
         print("No test case status data available")
 
