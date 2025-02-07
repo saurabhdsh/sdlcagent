@@ -265,18 +265,23 @@ def plot_test_case_status(test_cases_results: List[Dict]) -> None:
     test_case_latest = {}
     for result in test_cases_results:
         test_case = result.get('test_case_id', 'Unknown')
+        test_case_name = result.get('test_case_name', test_case)  # Get test case name
         date = result.get('date', 'N/A')
+        verdict = result.get('verdict', 'No Run')
+        
+        # Only update if this is a newer result
         if test_case not in test_case_latest or date > test_case_latest[test_case]['date']:
             test_case_latest[test_case] = {
                 'date': date,
-                'status': result.get('verdict', 'No Run'),
+                'status': verdict,
+                'name': test_case_name,
                 'build': result.get('build', 'N/A')
             }
     
     # Convert to list for DataFrame
     for test_case, data in test_case_latest.items():
         status_data.append({
-            'Test Case': test_case,
+            'Test Case': data['name'],  # Use test case name instead of ID
             'Status': data['status'],
             'Build': data['build'],
             'Date': data['date'].split('T')[0] if 'T' in data['date'] else data['date']
@@ -285,21 +290,25 @@ def plot_test_case_status(test_cases_results: List[Dict]) -> None:
     if status_data:
         df = pd.DataFrame(status_data)
         
-        # Create status counts for each test case
-        status_counts = df.groupby(['Test Case', 'Status']).size().unstack(fill_value=0)
-        
-        # Create a stacked bar chart
+        # Create a bar chart
         fig = go.Figure()
         
-        # Add bars for each status
-        for status in ['Pass', 'Fail', 'No Run']:
-            if status in status_counts.columns:
-                fig.add_trace(go.Bar(
-                    name=status,
-                    x=status_counts.index,
-                    y=status_counts[status],
-                    marker_color='#4CAF50' if status == 'Pass' else '#FF6B6B' if status == 'Fail' else '#FFB74D'
-                ))
+        # Calculate status counts for each test case
+        test_cases = df['Test Case'].unique()
+        statuses = ['Pass', 'Fail', 'No Run']
+        
+        for status in statuses:
+            counts = []
+            for tc in test_cases:
+                count = len(df[(df['Test Case'] == tc) & (df['Status'] == status)])
+                counts.append(count)
+            
+            fig.add_trace(go.Bar(
+                name=status,
+                x=test_cases,
+                y=counts,
+                marker_color='#4CAF50' if status == 'Pass' else '#FF6B6B' if status == 'Fail' else '#FFB74D'
+            ))
         
         # Update layout
         fig.update_layout(
@@ -399,15 +408,18 @@ def get_test_case_results(workspace_id: str, project_id: str, story_id: str) -> 
             print(f"Error fetching test cases: {str(e)}")
             break
     
-    # Collect all test results for trend analysis
+    # Process each test case and collect results
     all_results = []
-    
-    # Process each test case
     for test_case in all_test_cases:
         test_case_id = test_case.get('FormattedID')
+        test_case_name = test_case.get('Name', 'Unnamed Test')  # Get test case name
         if test_case_id:
             tc_details = get_test_case_details(workspace_id, test_case_id)
             if tc_details and tc_details.get("results"):
+                # Add test case name to each result
+                for result in tc_details["results"]:
+                    result['test_case_name'] = test_case_name
+                    result['test_case_id'] = test_case_id
                 all_results.extend(tc_details["results"])
     
     # Plot both trends
