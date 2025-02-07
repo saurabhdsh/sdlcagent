@@ -257,41 +257,56 @@ def plot_test_failure_trend(test_cases_results: List[Dict]) -> None:
         print("No trend data available")
 
 def plot_test_case_status(test_cases_results: List[Dict]) -> None:
-    """Plot test case status by name using Pygwalker"""
+    """Plot test case status by name using Plotly"""
     # Create DataFrame for test case status
     status_data = []
     
+    # Process results to get latest status for each test case
+    test_case_latest = {}
     for result in test_cases_results:
+        test_case = result.get('test_case_id', 'Unknown')
+        date = result.get('date', 'N/A')
+        if test_case not in test_case_latest or date > test_case_latest[test_case]['date']:
+            test_case_latest[test_case] = {
+                'date': date,
+                'status': result.get('verdict', 'No Run'),
+                'build': result.get('build', 'N/A')
+            }
+    
+    # Convert to list for DataFrame
+    for test_case, data in test_case_latest.items():
         status_data.append({
-            'Test Case': result.get('test_case_id', 'Unknown'),  # Changed from test_case_name
-            'Status': result.get('verdict', 'No Run'),
-            'Date': result.get('date', 'N/A').split('T')[0] if 'T' in result.get('date', 'N/A') else result.get('date', 'N/A'),
-            'Build': result.get('build', 'N/A')
+            'Test Case': test_case,
+            'Status': data['status'],
+            'Build': data['build'],
+            'Date': data['date'].split('T')[0] if 'T' in data['date'] else data['date']
         })
     
     if status_data:
         df = pd.DataFrame(status_data)
         
-        # Create a modern bar chart using plotly
-        fig = px.bar(
-            df,
-            x='Test Case',
-            color='Status',
-            title='Test Case Status Distribution',
-            color_discrete_map={
-                'Pass': '#4CAF50',
-                'Fail': '#FF6B6B',
-                'No Run': '#FFB74D'
-            },
-            barmode='group',
-            height=500
-        )
+        # Create status counts for each test case
+        status_counts = df.groupby(['Test Case', 'Status']).size().unstack(fill_value=0)
+        
+        # Create a stacked bar chart
+        fig = go.Figure()
+        
+        # Add bars for each status
+        for status in ['Pass', 'Fail', 'No Run']:
+            if status in status_counts.columns:
+                fig.add_trace(go.Bar(
+                    name=status,
+                    x=status_counts.index,
+                    y=status_counts[status],
+                    marker_color='#4CAF50' if status == 'Pass' else '#FF6B6B' if status == 'Fail' else '#FFB74D'
+                ))
         
         # Update layout
         fig.update_layout(
-            xaxis_title="Test Cases",
-            yaxis_title="Count",
-            plot_bgcolor='white',
+            title='Test Case Status Distribution',
+            xaxis_title='Test Cases',
+            yaxis_title='Count',
+            barmode='stack',
             showlegend=True,
             legend=dict(
                 orientation="h",
@@ -300,7 +315,8 @@ def plot_test_case_status(test_cases_results: List[Dict]) -> None:
                 xanchor="right",
                 x=1
             ),
-            xaxis={'categoryorder':'total descending'}
+            plot_bgcolor='white',
+            height=500
         )
         
         # Update axes
@@ -316,16 +332,16 @@ def plot_test_case_status(test_cases_results: List[Dict]) -> None:
             gridcolor='LightGray'
         )
         
-        # Show plotly chart
-        fig.show()
+        # Add hover template
+        fig.update_traces(
+            hovertemplate="<b>%{x}</b><br>" +
+                         "Status: %{data.name}<br>" +
+                         "Count: %{y}<br>" +
+                         "<extra></extra>"
+        )
         
-        try:
-            # Generate Pygwalker visualization
-            print("\nGenerating interactive Pygwalker visualization...")
-            pyg.walk(df, env='Jupyter')  # Changed to use Jupyter environment
-        except Exception as e:
-            print(f"Error generating Pygwalker visualization: {str(e)}")
-            print("Continuing with basic visualization...")
+        # Show the plot
+        fig.show()
     else:
         print("No test case status data available")
 
