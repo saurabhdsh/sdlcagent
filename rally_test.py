@@ -232,7 +232,7 @@ def plot_test_failure_trend(test_cases_results: List[Dict]) -> None:
         
         # Update layout
         fig.update_layout(
-            title="Test Case Execution Trend",
+            title="Test Case Execution History",
             xaxis_title="Date",
             yaxis_title="Number of Tests",
             hovermode='x unified',
@@ -265,7 +265,6 @@ def plot_test_case_status(test_cases_results: List[Dict]) -> None:
     test_case_latest = {}
     for result in test_cases_results:
         test_case = result.get('test_case_id', 'Unknown')
-        test_case_name = result.get('test_case_name', test_case)  # Get test case name
         date = result.get('date', 'N/A')
         verdict = result.get('verdict', 'No Run')
         
@@ -274,14 +273,13 @@ def plot_test_case_status(test_cases_results: List[Dict]) -> None:
             test_case_latest[test_case] = {
                 'date': date,
                 'status': verdict,
-                'name': test_case_name,
                 'build': result.get('build', 'N/A')
             }
     
     # Convert to list for DataFrame
     for test_case, data in test_case_latest.items():
         status_data.append({
-            'Test Case': data['name'],  # Use test case name instead of ID
+            'Test Case ID': test_case,
             'Status': data['status'],
             'Build': data['build'],
             'Date': data['date'].split('T')[0] if 'T' in data['date'] else data['date']
@@ -294,27 +292,37 @@ def plot_test_case_status(test_cases_results: List[Dict]) -> None:
         fig = go.Figure()
         
         # Calculate status counts for each test case
-        test_cases = df['Test Case'].unique()
+        test_cases = sorted(df['Test Case ID'].unique())  # Sort Test Case IDs
         statuses = ['Pass', 'Fail', 'No Run']
         
         for status in statuses:
-            counts = []
+            y_data = []
+            dates = []
             for tc in test_cases:
-                count = len(df[(df['Test Case'] == tc) & (df['Status'] == status)])
-                counts.append(count)
+                tc_data = df[df['Test Case ID'] == tc]
+                count = len(tc_data[tc_data['Status'] == status])
+                y_data.append(count)
+                dates.append(tc_data['Date'].iloc[0] if not tc_data.empty else 'N/A')
             
             fig.add_trace(go.Bar(
                 name=status,
-                x=test_cases,
-                y=counts,
-                marker_color='#4CAF50' if status == 'Pass' else '#FF6B6B' if status == 'Fail' else '#FFB74D'
+                y=test_cases,  # Test Case IDs on Y-axis
+                x=y_data,      # Counts on X-axis
+                orientation='h',  # Horizontal bars
+                marker_color='#4CAF50' if status == 'Pass' else '#FF6B6B' if status == 'Fail' else '#FFB74D',
+                customdata=dates,  # Add dates for hover
+                hovertemplate="<b>%{y}</b><br>" +
+                            "Status: %{data.name}<br>" +
+                            "Count: %{x}<br>" +
+                            "Date: %{customdata}<br>" +
+                            "<extra></extra>"
             ))
         
         # Update layout
         fig.update_layout(
-            title='Test Case Status Distribution',
-            xaxis_title='Test Cases',
-            yaxis_title='Count',
+            title='Test Case Wise Fail Vs Pass History',
+            yaxis_title='Test Case ID',
+            xaxis_title='Count',
             barmode='stack',
             showlegend=True,
             legend=dict(
@@ -325,28 +333,20 @@ def plot_test_case_status(test_cases_results: List[Dict]) -> None:
                 x=1
             ),
             plot_bgcolor='white',
-            height=500
+            height=max(500, len(test_cases) * 25)
         )
         
         # Update axes
-        fig.update_xaxes(
-            tickangle=45,
-            showgrid=True,
-            gridwidth=1,
-            gridcolor='LightGray'
-        )
         fig.update_yaxes(
             showgrid=True,
             gridwidth=1,
-            gridcolor='LightGray'
+            gridcolor='LightGray',
+            autorange="reversed"  # Show test cases in ascending order from top to bottom
         )
-        
-        # Add hover template
-        fig.update_traces(
-            hovertemplate="<b>%{x}</b><br>" +
-                         "Status: %{data.name}<br>" +
-                         "Count: %{y}<br>" +
-                         "<extra></extra>"
+        fig.update_xaxes(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='LightGray'
         )
         
         # Show the plot
