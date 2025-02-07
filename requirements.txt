@@ -7,4 +7,5 @@ pyral>=1.4.0
 flask
 pandas
 plotly
+pygwalker>=0.3.0
 

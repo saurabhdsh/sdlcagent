@@ -6,6 +6,9 @@ import warnings
 import plotly.graph_objects as go
 from collections import defaultdict
 from datetime import datetime
+import pygwalker as pyg
+import pandas as pd
+import plotly.express as px
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -253,6 +256,81 @@ def plot_test_failure_trend(test_cases_results: List[Dict]) -> None:
     else:
         print("No trend data available")
 
+def plot_test_case_status(test_cases_results: List[Dict]) -> None:
+    """Plot test case status by name using Pygwalker"""
+    # Create DataFrame for test case status
+    status_data = []
+    
+    for result in test_cases_results:
+        status_data.append({
+            'Test Case': result.get('test_case_name', 'Unknown'),
+            'Status': result.get('verdict', 'No Run'),
+            'Date': result.get('date', 'N/A').split('T')[0] if 'T' in result.get('date', 'N/A') else result.get('date', 'N/A'),
+            'Build': result.get('build', 'N/A')
+        })
+    
+    if status_data:
+        df = pd.DataFrame(status_data)
+        
+        # Create a modern bar chart using plotly
+        fig = px.bar(
+            df,
+            x='Test Case',
+            color='Status',
+            title='Test Case Status Distribution',
+            color_discrete_map={
+                'Pass': '#4CAF50',
+                'Fail': '#FF6B6B',
+                'No Run': '#FFB74D'
+            },
+            barmode='group',
+            height=500
+        )
+        
+        # Update layout
+        fig.update_layout(
+            xaxis_title="Test Cases",
+            yaxis_title="Count",
+            plot_bgcolor='white',
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            ),
+            xaxis={'categoryorder':'total descending'}
+        )
+        
+        # Update axes
+        fig.update_xaxes(
+            tickangle=45,
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='LightGray'
+        )
+        fig.update_yaxes(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='LightGray'
+        )
+        
+        # Show plotly chart
+        fig.show()
+        
+        # Create Pygwalker visualization
+        print("\nGenerating interactive Pygwalker visualization...")
+        walker = pyg.walk(df, return_html=True)
+        
+        # Save the visualization to an HTML file
+        with open('test_case_analysis.html', 'w') as f:
+            f.write(walker)
+        print("Interactive visualization saved to 'test_case_analysis.html'")
+        
+    else:
+        print("No test case status data available")
+
 def get_test_case_results(workspace_id: str, project_id: str, story_id: str) -> Dict[str, Any]:
     """Fetch test case results for a specific user story"""
     headers = {
@@ -318,9 +396,10 @@ def get_test_case_results(workspace_id: str, project_id: str, story_id: str) -> 
             if tc_details and tc_details.get("results"):
                 all_results.extend(tc_details["results"])
     
-    # Plot the trend before showing individual test case details
-    print("\nGenerating test execution trend chart...")
+    # Plot both trends
+    print("\nGenerating test execution trends...")
     plot_test_failure_trend(all_results)
+    plot_test_case_status(all_results)
     
     # Continue with existing test case details display
     print(f"\nTest Cases for User Story {story_id}:")
