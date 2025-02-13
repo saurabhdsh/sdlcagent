@@ -19,26 +19,18 @@ config: Dict[str, str] = {
     "selected_project": ""
 }
  
-def call_openai_api(messages, model="gpt-3.5-turbo"):
-    """
-    Call the OpenAI API with the given messages.
-   
-    Args:
-        messages (list): List of message dictionaries with 'role' and 'content'
-        model (str): The OpenAI model to use (default: "gpt-3.5-turbo")
-       
-    Returns:
-        str: The response content from the API
-    """
+def call_openai_api(prompt: str, api_key: str, model: str = "gpt-4") -> str:
+    """Call OpenAI API with the given prompt and model"""
     try:
+        openai.api_key = api_key
         response = openai.ChatCompletion.create(
-            model=model,
-            messages=messages
+            model=model,  # Use the passed model parameter
+            messages=[{"role": "user", "content": prompt}]
         )
         return response.choices[0].message.content
     except Exception as e:
-        print(f"Error calling OpenAI API: {str(e)}")
-        return None
+        logging.error(f"Error calling OpenAI API: {str(e)}")
+        return f"Error: {str(e)}"
  
 def check_rally_config() -> bool:
     """
